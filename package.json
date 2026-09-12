@@ -1,0 +1,32 @@
+{
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "artifacts/*",
+    "lib/*",
+    "scripts"
+  ],
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build --config artifacts/tracker/vite.config.ts && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
+    "typecheck": "tsc --build",
+    "lint": "tsc --build"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.4",
+    "@vitejs/plugin-react": "^5.0.4",
+    "cors": "^2.8.5",
+    "esbuild": "^0.25.0",
+    "express": "^5.0.1",
+    "prettier": "^3.5.1",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.3",
+    "vite": "^7.3.2"
+  }
+}

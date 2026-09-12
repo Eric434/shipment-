@@ -1,0 +1,6 @@
+{
+  "name": "Tesla Tracker",
+  "description": "Tesla-themed precision fleet logistics and package tracking platform with live maps and admin controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

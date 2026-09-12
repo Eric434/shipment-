@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "buildCommand": "pnpm run build",
+  "installCommand": "pnpm install",
+  "projects": [
+    {
+      "name": "tracker",
+      "slug": "tracker",
+      "rootDirectory": "artifacts/tracker",
+      "buildCommand": "pnpm run build",
+      "env": []
+    },
+    {
+      "name": "api-server",
+      "slug": "api-server",
+      "rootDirectory": "artifacts/api-server",
+      "buildCommand": "pnpm run build",
+      "env": []
+    }
+  ]
+}
