@@ -18,7 +18,7 @@ A Tesla-themed precision fleet logistics and package tracking platform. Users en
 - Frontend: React + Vite + Tailwind CSS + shadcn/ui, Leaflet (maps), Framer Motion
 - API: Express 5 + pg (direct SQL, no ORM)
 - DB: PostgreSQL (Replit managed)
-- Emails: Resend (optional — gracefully skipped if key not set)
+- Notifications: Internal subscriber tracking
 - Build: esbuild (CJS bundle for API server)
 
 ## Where things live
@@ -32,7 +32,7 @@ A Tesla-themed precision fleet logistics and package tracking platform. Users en
 ## Architecture decisions
 
 - API server uses raw `pg` Pool queries (no Drizzle ORM) for direct SQL control
-- Resend client is lazily initialized so the server starts without `RESEND_API_KEY`
+- Subscriptions and delivery notifications are tracked in the database
 - Admin auth is simple token-based (`x-admin-token` header matches `ADMIN_PASSWORD`)
 - Frontend proxies `/api` to `localhost:8080` via Vite dev server proxy
 - Package route data stored as JSONB array of `{lat, lng}` waypoints

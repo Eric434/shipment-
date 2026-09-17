@@ -652,7 +652,7 @@ function DashboardTab({ packages, onCreateNew, onRefresh, loading, onNavigate }:
     { name: "Leaflet", color: "bg-green-400/20 text-green-200 border-green-400/20" },
     { name: "Tailwind CSS", color: "bg-cyan-500/20 text-cyan-300 border-cyan-500/20" },
     { name: "Express 5", color: "bg-gray-500/20 text-gray-300 border-gray-500/20" },
-    { name: "Resend", color: "bg-yellow-500/20 text-yellow-300 border-yellow-500/20" },
+    { name: "Alerts Service", color: "bg-yellow-500/20 text-yellow-300 border-yellow-500/20" },
     { name: "Real-time GPS", color: "bg-red-500/20 text-red-300 border-red-500/20" },
   ];
 
@@ -1335,7 +1335,7 @@ function SettingsTab({ onLogout }: { onLogout: () => void }) {
     { icon: Lock, label: "SSL / HTTPS Encryption", desc: "All data transmitted over encrypted connections", status: "Active" },
     { icon: Wifi, label: "Real-time GPS Tracking", desc: "Live vehicle position simulation with bearing & speed", status: "Active" },
     { icon: Globe, label: "CARTO Maps & GIS API", desc: "CARTO GCP US-East1 endpoint integration (gcp-us-east1.api.carto.com)", status: "Active" },
-    { icon: Bell, label: "Push Notifications", desc: "Email alerts via Resend API on delivery events", status: "Active" },
+    { icon: Bell, label: "Push Notifications", desc: "Automated subscriber alerts on delivery status milestones", status: "Active" },
     { icon: QrCode, label: "QR Code Tracking", desc: "Deep-link URLs for instant tracking access", status: "Active" },
     { icon: Globe, label: "Multi-language Support", desc: "Interface localization for global shipments", status: "Planned" },
     { icon: Star, label: "Delivery Proof Upload", desc: "Photo confirmation on successful delivery", status: "Planned" },

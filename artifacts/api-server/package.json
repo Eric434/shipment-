@@ -19,8 +19,7 @@
     "express": "^5.0.1",
     "pg": "^8.20.0",
     "pino": "^9.6.0",
-    "pino-http": "^10.4.0",
-    "resend": "^6.12.3"
+    "pino-http": "^10.4.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

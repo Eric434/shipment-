@@ -181,7 +181,7 @@ export async function adminDeletePackage(
 export interface BasemapConfig {
   id: string;
   name: string;
-  provider: "OpenStreetMap" | "Esri" | "OpenTopoMap" | "CARTO" | "Stadia" | "Custom";
+  provider: "OpenStreetMap" | "Esri" | "OpenTopoMap" | "CARTO" | "Stadia" | "Stadia Maps" | "Custom";
   category: "navigation" | "dark" | "light" | "satellite" | "topo" | "custom";
   badge: string;
   description: string;

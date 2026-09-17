@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import {
   Search, MapPin, Bell, TrendingUp, ArrowUp,
-  ChevronRight, Zap, Clock, Shield, ExternalLink,
+  ChevronRight, Zap, Clock, Shield,
   Plane, Ship, Truck, Train, Package, Warehouse,
 } from "lucide-react";
 
@@ -73,9 +73,9 @@ const TESLA_GALLERY = [
   { img: modelSInteriorImg,label: "Autopilot cockpit" },
 ];
 
-interface Props { onTrack: (code: string) => void; onAdmin: () => void; }
+interface Props { onTrack: (code: string) => void; onAdmin?: () => void; }
 
-export default function LandingPage({ onTrack, onAdmin }: Props) {
+export default function LandingPage({ onTrack }: Props) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
@@ -93,13 +93,9 @@ export default function LandingPage({ onTrack, onAdmin }: Props) {
             Tesla<span className="text-red-500">Track</span>
           </span>
         </div>
-        <div className="flex items-center gap-3 md:gap-6">
-          <a href="#features" className="hidden sm:block text-xs text-white/40 hover:text-white/70 transition-colors">Features</a>
-          <a href="#how-it-works" className="hidden sm:block text-xs text-white/40 hover:text-white/70 transition-colors">How it works</a>
-          <button onClick={onAdmin}
-            className="text-xs px-3 md:px-4 py-1.5 border border-white/10 rounded-full text-white/50 hover:text-white hover:border-white/30 transition-all whitespace-nowrap">
-            Admin
-          </button>
+        <div className="flex items-center gap-4 md:gap-6">
+          <a href="#features" className="text-xs text-white/40 hover:text-white/70 transition-colors">Features</a>
+          <a href="#how-it-works" className="text-xs text-white/40 hover:text-white/70 transition-colors">How it works</a>
         </div>
       </nav>
 
@@ -344,10 +340,6 @@ export default function LandingPage({ onTrack, onAdmin }: Props) {
           <div className="flex items-center gap-6">
             <a href="#features" className="text-[10px] text-white/25 hover:text-white/50 transition-colors">Features</a>
             <a href="#how-it-works" className="text-[10px] text-white/25 hover:text-white/50 transition-colors">How it works</a>
-            <button onClick={onAdmin}
-              className="flex items-center gap-1.5 text-[10px] text-white/25 hover:text-white/50 transition-colors">
-              Admin Portal <ExternalLink className="w-2.5 h-2.5" />
-            </button>
           </div>
         </div>
       </footer>

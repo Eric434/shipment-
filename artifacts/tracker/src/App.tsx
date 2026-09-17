@@ -6,19 +6,32 @@ import AdminPage from "@/pages/AdminPage";
 type View = { screen: "landing" } | { screen: "tracking"; code: string } | { screen: "admin" };
 
 function App() {
-  const initialCode = new URLSearchParams(window.location.search).get("code")?.trim().toUpperCase() ?? "";
-  const [view, setView] = useState<View>(
-    initialCode ? { screen: "tracking", code: initialCode } : { screen: "landing" }
-  );
+  const getInitialView = (): View => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const initialCode = searchParams.get("code")?.trim().toUpperCase() ?? "";
+    if (initialCode) return { screen: "tracking", code: initialCode };
+    if (window.location.pathname === "/admin" || searchParams.has("admin")) {
+      return { screen: "admin" };
+    }
+    return { screen: "landing" };
+  };
+
+  const [view, setView] = useState<View>(getInitialView);
 
   useEffect(() => {
+    const url = new URL(window.location.href);
     if (view.screen === "tracking") {
-      const url = new URL(window.location.href);
+      url.pathname = "/";
+      url.searchParams.delete("admin");
       url.searchParams.set("code", view.code);
       window.history.replaceState(null, "", url.toString());
-    } else {
-      const url = new URL(window.location.href);
+    } else if (view.screen === "admin") {
       url.searchParams.delete("code");
+      window.history.replaceState(null, "", url.toString());
+    } else {
+      url.pathname = "/";
+      url.searchParams.delete("code");
+      url.searchParams.delete("admin");
       window.history.replaceState(null, "", url.toString());
     }
   }, [view]);
@@ -45,7 +58,6 @@ function App() {
   return (
     <LandingPage
       onTrack={(code) => setView({ screen: "tracking", code })}
-      onAdmin={() => setView({ screen: "admin" })}
     />
   );
 }
