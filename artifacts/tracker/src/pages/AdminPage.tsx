@@ -32,7 +32,7 @@ const ROUTE_PRESETS: Record<string, { label: string; route: [number, number][]; 
     route: [[34.0522,-118.2437],[34.6,-118.6],[35.2,-119.0],[35.65,-119.3],[35.9,-119.5],[36.3,-119.8],[36.7,-120.1],[37.1,-120.6],[37.4,-121.1],[37.6,-121.9],[37.7749,-122.4194]],
   },
   portland_sf: {
-    label: "Portland → toSan Francisco",
+    label: "Portland → San Francisco",
     origin: "Portland, OR",
     destination: "San Francisco, CA",
     route: [[45.5051,-122.675],[44.0,-122.3],[42.8,-122.0],[41.5,-122.15],[40.3,-122.3],[39.2,-122.4],[38.5,-122.5],[38.0,-122.48],[37.7749,-122.4194]],
@@ -963,10 +963,8 @@ function ShipmentsTab({ packages, token, loading, onRefresh, onTrack, onCreateNe
 // ─── Payments Tab ─────────────────────────────────────────────────────────────
 
 function printInvoice(pkg: Pkg, invNum: string, isPaid: boolean) {
-  const win = window.open("", "_blank", "width=800,height=600");
-  if (!win) return;
   const amount = Number(pkg.shipping_cost || 0).toFixed(2);
-  win.document.write(`<!DOCTYPE html><html><head><title>${invNum}</title>
+  const html = `<!DOCTYPE html><html><head><title>${invNum}</title>
   <style>body{font-family:Arial,sans-serif;color:#111;padding:40px;max-width:700px;margin:0 auto}
   h1{font-size:28px;font-weight:700;margin-bottom:4px}
   .sub{color:#666;font-size:14px;margin-bottom:32px}
@@ -995,10 +993,38 @@ function printInvoice(pkg: Pkg, invNum: string, isPaid: boolean) {
   <div class="total">Total: $${amount}</div>
   <div style="margin-top:8px"><button onclick="window.print()" style="padding:10px 24px;background:#111;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer">Print / Save PDF</button></div>
   <div class="footer">TeslaTrack Logistics · Generated ${new Date().toLocaleDateString()}</div>
-  </body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => { win.print(); }, 400);
+  </body></html>`;
+
+  try {
+    const win = window.open("", "_blank", "width=800,height=600");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => { win.print(); }, 400);
+      return;
+    }
+  } catch {}
+
+  const printIframe = document.createElement("iframe");
+  printIframe.style.position = "fixed";
+  printIframe.style.right = "0";
+  printIframe.style.bottom = "0";
+  printIframe.style.width = "0";
+  printIframe.style.height = "0";
+  printIframe.style.border = "0";
+  document.body.appendChild(printIframe);
+  const docObj = printIframe.contentWindow?.document;
+  if (docObj) {
+    docObj.open();
+    docObj.write(html);
+    docObj.close();
+    printIframe.contentWindow?.focus();
+    setTimeout(() => {
+      printIframe.contentWindow?.print();
+      setTimeout(() => { if (document.body.contains(printIframe)) document.body.removeChild(printIframe); }, 1000);
+    }, 500);
+  }
 }
 
 function PaymentsTab({ packages }: { packages: Pkg[] }) {

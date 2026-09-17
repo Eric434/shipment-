@@ -31,4 +31,11 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
+// Centralized JSON error handling
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error(err);
+  const status = typeof err.status === "number" ? err.status : 500;
+  res.status(status).json({ error: err?.message || "Internal server error" });
+});
+
 export default app;

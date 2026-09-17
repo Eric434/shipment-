@@ -46,8 +46,9 @@ router.post("/notify/delivered", async (req, res) => {
     const sent = subsRes.rowCount ?? 0;
     console.log(`[Alerts] Shipment ${code} delivered, notified ${sent} subscriber(s)`);
 
-    // Update package status to Delivered in DB
+    // Update package status to Delivered in DB and mark all events as complete
     await pool.query("UPDATE packages SET status='Delivered', updated_at=NOW() WHERE code=$1", [code]);
+    await pool.query("UPDATE package_events SET done=TRUE WHERE code=$1", [code]);
 
     res.json({ success: true, sent });
   } catch (err) {

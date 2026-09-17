@@ -73,7 +73,7 @@ const TESLA_GALLERY = [
   { img: modelSInteriorImg,label: "Autopilot cockpit" },
 ];
 
-interface Props { onTrack: (code: string) => void; onAdmin?: () => void; }
+interface Props { onTrack: (code: string) => void; }
 
 export default function LandingPage({ onTrack }: Props) {
   const [query, setQuery] = useState("");

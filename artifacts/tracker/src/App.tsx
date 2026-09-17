@@ -19,6 +19,14 @@ function App() {
   const [view, setView] = useState<View>(getInitialView);
 
   useEffect(() => {
+    const handlePopState = () => {
+      setView(getInitialView());
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
     const url = new URL(window.location.href);
     if (view.screen === "tracking") {
       url.pathname = "/";
@@ -26,6 +34,7 @@ function App() {
       url.searchParams.set("code", view.code);
       window.history.replaceState(null, "", url.toString());
     } else if (view.screen === "admin") {
+      url.pathname = "/admin";
       url.searchParams.delete("code");
       window.history.replaceState(null, "", url.toString());
     } else {
@@ -41,7 +50,6 @@ function App() {
       <TrackingResult
         code={view.code}
         onBack={() => setView({ screen: "landing" })}
-        onAdmin={() => setView({ screen: "admin" })}
       />
     );
   }

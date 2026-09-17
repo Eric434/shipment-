@@ -280,7 +280,7 @@ function computeStepMs(eta: string, startProgress: number): number {
 }
 
 type DrawerTab = "timeline" | "alerts" | "docs";
-interface Props { code: string; onBack: () => void; onAdmin: () => void; }
+interface Props { code: string; onBack: () => void; }
 
 // ─── Loading / Error screens ──────────────────────────────────────────────────
 
@@ -348,7 +348,7 @@ function ErrorScreen({ code, reason, onBack, onRetry }: {
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
-export default function TrackingResult({ code, onBack, onAdmin }: Props) {
+export default function TrackingResult({ code, onBack }: Props) {
   const [result, setResult] = useState<FetchPackageResult | "loading">("loading");
 
   const load = useCallback(() => {
@@ -361,7 +361,7 @@ export default function TrackingResult({ code, onBack, onAdmin }: Props) {
   if (result === "loading") return <LoadingScreen />;
   if (!result.ok && result.reason === "not_found") return <NotFoundScreen code={code} onBack={onBack} />;
   if (!result.ok) return <ErrorScreen code={code} reason={result.reason as "server_error" | "network_error"} onBack={onBack} onRetry={load} />;
-  return <TrackingView pkg={result.pkg} code={code} onBack={onBack} onAdmin={onAdmin} />;
+  return <TrackingView pkg={result.pkg} code={code} onBack={onBack} />;
 }
 
 // ─── Milestone stepper panel ──────────────────────────────────────────────────
@@ -1058,12 +1058,36 @@ function printDocument(doc: { name: string; ref: string; pages: number }, pkg: P
   ${docFooter(refNo, now)}
   </body></html>`;
 
-  const win = window.open("", "_blank", "width=860,height=1100");
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => { win.print(); }, 400);
+  try {
+    const win = window.open("", "_blank", "width=860,height=1100");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => { win.print(); }, 400);
+      return;
+    }
+  } catch {}
+
+  const printIframe = document.createElement("iframe");
+  printIframe.style.position = "fixed";
+  printIframe.style.right = "0";
+  printIframe.style.bottom = "0";
+  printIframe.style.width = "0";
+  printIframe.style.height = "0";
+  printIframe.style.border = "0";
+  document.body.appendChild(printIframe);
+  const docObj = printIframe.contentWindow?.document;
+  if (docObj) {
+    docObj.open();
+    docObj.write(html);
+    docObj.close();
+    printIframe.contentWindow?.focus();
+    setTimeout(() => {
+      printIframe.contentWindow?.print();
+      setTimeout(() => { if (document.body.contains(printIframe)) document.body.removeChild(printIframe); }, 1000);
+    }, 500);
+  }
 }
 
 // ─── Document Vault panel ─────────────────────────────────────────────────────
@@ -1152,7 +1176,7 @@ function DocumentsPanel({ code, pkg }: { code: string; pkg: Pkg }) {
 
 // ─── Main TrackingView ────────────────────────────────────────────────────────
 
-function TrackingView({ pkg, code, onBack, onAdmin }: { pkg: Pkg; code: string; onBack: () => void; onAdmin: () => void }) {
+function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: () => void }) {
   const route = normalizeRoute(pkg.route);
   const fullPath = interpolateRoute(route, TOTAL);
   const startIdx = Math.min(Math.floor(pkg.start_progress * (TOTAL - 1)), TOTAL - 1);
@@ -1244,7 +1268,15 @@ function TrackingView({ pkg, code, onBack, onAdmin }: { pkg: Pkg; code: string; 
   }, [drawerOpen]);
 
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
+    if (!mapRef.current) return;
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
+    // Prevent Leaflet "Map container is already initialized" error across re-renders
+    if ((mapRef.current as any)._leaflet_id) {
+      delete (mapRef.current as any)._leaflet_id;
+    }
     const initPos = fullPath[startIdx];
     const map = L.map(mapRef.current, { center: initPos, zoom: 12, zoomControl: false });
 
@@ -1503,10 +1535,6 @@ function TrackingView({ pkg, code, onBack, onAdmin }: { pkg: Pkg; code: string; 
             <img src="/tesla-logo.png" alt="TeslaTrack" className="logo-spin w-6 h-6 object-contain opacity-50" />
             <span className="text-[9px] text-white/20 uppercase tracking-widest font-semibold">TeslaTrack</span>
           </div>
-          <button onClick={onAdmin}
-            className="text-[9px] text-white/20 hover:text-white/45 transition-colors px-2 py-1 rounded border border-white/6 hover:border-white/15">
-            Admin
-          </button>
         </div>
       </div>
 
