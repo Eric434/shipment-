@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import {
   ArrowLeft, Package, CheckCircle2, Circle, MapPin, Clock,
   Bell, BellOff, Play, Pause, RotateCcw, Navigation,
@@ -6,6 +6,7 @@ import {
   X, List, FileText, Download, Compass, Lock, CheckSquare,
   Calendar, CalendarDays, Crosshair, Map as MapIcon,
   Sun, Moon, Check, FastForward, Plus, Minus, Layers, Maximize2,
+  Truck, Share2, Phone, Info, Box, Route, Copy, CheckCheck,
 } from "lucide-react";
 import { fetchPackage, subscribeToAlerts, notifyDelivered, type Package as Pkg, type FetchPackageResult } from "@/lib/api";
 import { MapLibreNavigationHUD } from "@/components/MapLibreNavigation";
@@ -1168,6 +1169,60 @@ function DocumentsPanel({ code, pkg }: { code: string; pkg: Pkg }) {
   );
 }
 
+// ─── Mobile customer tracking layout ──────────────────────────────────────────
+
+function MobileTrackingLayout({
+  pkg, code, onBack, mapRef, mapLoading, mapError, progress, isDelivered, playing,
+  simSpeed, deliveryEstimate, currentCoord, fullPath, posIdx, handleRecenterCamera,
+  handleToggleOverview, setDrawerOpen, setDrawerTab,
+}: {
+  pkg: Pkg; code: string; onBack: () => void; mapRef: React.RefObject<HTMLDivElement | null>;
+  mapLoading: boolean; mapError: string | null; progress: number; isDelivered: boolean;
+  playing: boolean; simSpeed: number; deliveryEstimate: DeliveryEstimate;
+  currentCoord?: [number, number]; fullPath: [number, number][]; posIdx: number;
+  handleRecenterCamera: () => void; handleToggleOverview: () => void;
+  setDrawerOpen: (open: boolean) => void; setDrawerTab: (tab: DrawerTab) => void;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [shared, setShared] = useState(false);
+  const activeIndex = isDelivered ? 4 : pkg.status === "Out for Delivery" ? 3 : pkg.status === "In Transit" ? 2 : pkg.status === "Picked Up" ? 1 : 0;
+  const steps = ["Order Confirmed", "Picked Up", "In Transit", "Out for Delivery", "Delivered"];
+  const shareTracking = async () => {
+    const shareData = { title: `Shipment ${code}`, text: `Track shipment ${code}`, url: window.location.href };
+    if (navigator.share) await navigator.share(shareData).catch(() => undefined);
+    else await navigator.clipboard?.writeText(window.location.href);
+    setShared(true); window.setTimeout(() => setShared(false), 1800);
+  };
+
+  return (
+    <main className="min-h-[100dvh] bg-[#f5f8fb] text-slate-950 pb-7">
+      <header className="flex items-center justify-between px-5 pt-5 pb-4 bg-white">
+        <button onClick={onBack} aria-label="Go back" className="grid size-10 place-items-center rounded-full bg-slate-100 text-slate-700"><ArrowLeft className="size-5" /></button>
+        <div className="text-center"><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Track Shipment</p><p className="mt-1 font-mono text-sm font-bold tracking-wide text-slate-900">{code}</p></div>
+        <button onClick={shareTracking} aria-label="Share tracking" className="grid size-10 place-items-center rounded-full bg-blue-50 text-blue-600"><Share2 className="size-5" /></button>
+      </header>
+
+      <section className="px-4 pt-4"><div className="relative h-[245px] overflow-hidden rounded-[26px] bg-slate-200 shadow-[0_12px_30px_rgba(15,23,42,0.12)]">
+        <div ref={mapRef} className="absolute inset-0" />
+        {mapLoading && <div className="absolute inset-0 grid place-items-center bg-slate-100/90"><Loader2 className="size-7 animate-spin text-blue-600" /></div>}
+        {mapError && <div className="absolute inset-3 flex items-center justify-center rounded-2xl bg-white/90 p-4 text-center text-xs text-slate-600">{mapError}</div>}
+        <div className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-semibold text-slate-700 shadow-sm backdrop-blur">Live location</div>
+        <div className="absolute bottom-3 right-3 flex gap-2"><button onClick={handleRecenterCamera} className="grid size-9 place-items-center rounded-full bg-white text-blue-600 shadow-md" aria-label="Center on vehicle"><Crosshair className="size-4" /></button><button onClick={handleToggleOverview} className="grid size-9 place-items-center rounded-full bg-white text-slate-600 shadow-md" aria-label="Show route overview"><Maximize2 className="size-4" /></button></div>
+      </div></section>
+
+      <section className="px-4 pt-4"><div className="rounded-[22px] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.07)]"><div className="flex items-start justify-between"><div><div className="flex items-center gap-2"><span className="size-2.5 animate-pulse rounded-full bg-emerald-500" /><span className="text-sm font-semibold text-emerald-700">{isDelivered ? "Delivered" : "In Transit"}</span></div><p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{isDelivered ? "Delivered" : "Arriving Today"}</p><p className="mt-1 text-sm text-slate-500">Estimated {deliveryEstimate.formattedTime} · {deliveryEstimate.remainingDistanceKm} km away</p></div><div className="grid size-12 place-items-center rounded-2xl bg-blue-50 text-blue-600"><Truck className="size-6" /></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-emerald-500 transition-all" style={{ width: `${Math.max(progress, 8)}%` }} /></div><div className="mt-2 flex justify-between text-[10px] font-medium text-slate-400"><span>{progress}% complete</span><span>{playing ? `Moving · ${simSpeed} km/h` : "Live tracking"}</span></div></div></section>
+
+      <section className="px-4 pt-4"><div className="rounded-[22px] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.07)]"><div className="mb-5 flex items-center justify-between"><h2 className="text-base font-bold text-slate-900">Shipment progress</h2><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">Live</span></div><div className="flex flex-col gap-4">{steps.map((step, index) => { const done = index <= activeIndex; return <div key={step} className="flex items-center gap-3"><div className={`relative grid size-6 place-items-center rounded-full border-2 ${done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-200 bg-white text-slate-300"}`}>{done ? <Check className="size-3.5" /> : <Circle className="size-2.5" />}{index < steps.length - 1 && <span className={`absolute left-1/2 top-6 h-4 w-px -translate-x-1/2 ${index < activeIndex ? "bg-emerald-300" : "bg-slate-200"}`} />}</div><span className={`text-sm ${done ? "font-semibold text-slate-800" : "text-slate-400"}`}>{step}</span></div> })}</div></div></section>
+
+      <section className="px-4 pt-4"><div className="grid grid-cols-2 gap-3"><div className="rounded-[18px] bg-white p-4 shadow-sm"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">From</p><p className="mt-2 truncate text-sm font-semibold text-slate-800">{pkg.origin}</p><p className="mt-1 text-xs text-slate-400">Origin hub</p></div><div className="rounded-[18px] bg-white p-4 shadow-sm"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">To</p><p className="mt-2 truncate text-sm font-semibold text-slate-800">{pkg.destination}</p><p className="mt-1 text-xs text-slate-400">Destination</p></div></div></section>
+
+      <section className="px-4 pt-4"><div className="rounded-[22px] bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xs text-slate-400">Courier</p><p className="mt-1 text-sm font-bold text-slate-800">{pkg.carrier}</p><p className="mt-1 font-mono text-xs text-slate-400">Ref. {code}</p></div><div className="grid size-11 place-items-center rounded-xl bg-blue-50 text-blue-600"><Package className="size-5" /></div></div><button onClick={() => setDetailsOpen((open) => !open)} className="mt-4 flex w-full items-center justify-between border-t border-slate-100 pt-4 text-left text-sm font-semibold text-blue-600"><span>Package details</span><Info className="size-4" /></button>{detailsOpen && <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] text-slate-400">Weight</p><p className="mt-1 text-xs font-bold text-slate-700">{pkg.weight || "—"}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] text-slate-400">Type</p><p className="mt-1 text-xs font-bold text-slate-700">Package</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] text-slate-400">Method</p><p className="mt-1 truncate text-xs font-bold text-slate-700">{pkg.delivery_method || "Standard"}</p></div></div>}</div></section>
+
+      <section className="flex gap-2 px-4 pt-5"><button onClick={() => { setDrawerTab("alerts"); setDrawerOpen(true); }} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-semibold text-slate-700 shadow-sm"><Phone className="size-4 text-blue-600" /> Contact Courier</button><button onClick={() => setDetailsOpen(true)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-semibold text-slate-700 shadow-sm"><Info className="size-4 text-blue-600" /> View Details</button><button onClick={shareTracking} className="grid size-12 place-items-center rounded-xl bg-blue-600 text-white shadow-sm" aria-label="Share tracking">{shared ? <CheckCheck className="size-4" /> : <Share2 className="size-4" />}</button></section>
+    </main>
+  );
+}
+
 // ─── Main TrackingView ────────────────────────────────────────────────────────
 
 function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: () => void }) {
@@ -1515,6 +1570,27 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
     if (pkg.status === "Out for Delivery") return "from-red-600 via-orange-500 to-blue-500";
     return "from-red-600 to-yellow-500";
   };
+
+  return <MobileTrackingLayout
+    pkg={pkg}
+    code={code}
+    onBack={onBack}
+    mapRef={mapRef}
+    mapLoading={mapLoading}
+    mapError={mapError}
+    progress={progress}
+    isDelivered={isDelivered}
+    playing={playing}
+    simSpeed={simSpeed}
+    deliveryEstimate={deliveryEstimate}
+    currentCoord={currentCoord}
+    fullPath={fullPath}
+    posIdx={posIdx}
+    handleRecenterCamera={handleRecenterCamera}
+    handleToggleOverview={handleToggleOverview}
+    setDrawerOpen={setDrawerOpen}
+    setDrawerTab={setDrawerTab}
+  />;
 
   return (
     <div className="relative bg-[#080808] text-white overflow-hidden animate-fade-in" style={{ height: "100dvh", width: "100vw" }}>

@@ -44,14 +44,55 @@ export type FetchPackageResult =
   | { ok: true; pkg: Package }
   | { ok: false; reason: "not_found" | "server_error" | "network_error" };
 
+const DEMO_PACKAGE: Package = {
+  code: "DEMO123",
+  status: "In Transit",
+  eta: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+  origin: "San Francisco, CA",
+  destination: "Los Angeles, CA",
+  carrier: "SwiftLine Express",
+  weight: "4.8 kg",
+  speed_kph: 62,
+  start_progress: 0.58,
+  route: [
+    [37.7749, -122.4194],
+    [36.9741, -121.895],
+    [35.3733, -119.0187],
+    [34.0522, -118.2437],
+  ],
+  events: [
+    { time_label: "Today, 8:42 AM", label: "Order Confirmed", location: "San Francisco, CA", done: true, sort_order: 0 },
+    { time_label: "Today, 9:18 AM", label: "Picked Up", location: "San Francisco, CA", done: true, sort_order: 1 },
+    { time_label: "Today, 11:05 AM", label: "In Transit", location: "Bakersfield, CA", done: true, sort_order: 2 },
+    { time_label: "Estimated", label: "Out for Delivery", location: "Los Angeles, CA", done: false, sort_order: 3 },
+    { time_label: "Estimated", label: "Delivered", location: "Los Angeles, CA", done: false, sort_order: 4 },
+  ],
+  created_at: new Date().toISOString(),
+  sender_name: "Northstar Supply Co.",
+  sender_email: "shipping@northstar.example",
+  sender_phone: "",
+  sender_address: "San Francisco, CA",
+  receiver_name: "Jordan Lee",
+  receiver_email: "jordan@example.com",
+  receiver_phone: "",
+  receiver_address: "Los Angeles, CA",
+  delivery_method: "Express ground",
+  shipping_cost: 24.99,
+  customs_status: "Not required",
+  customs_fee: 0,
+};
+
 export async function fetchPackage(code: string): Promise<FetchPackageResult> {
+  const normalizedCode = code.trim().toUpperCase();
   try {
-    const res = await fetch(`${API}/packages/${encodeURIComponent(code.trim().toUpperCase())}`);
-    if (res.status === 404) return { ok: false, reason: "not_found" };
+    const res = await fetch(`${API}/packages/${encodeURIComponent(normalizedCode)}`);
+    if (res.status === 404) {
+      return normalizedCode === DEMO_PACKAGE.code ? { ok: true, pkg: DEMO_PACKAGE } : { ok: false, reason: "not_found" };
+    }
     if (!res.ok) return { ok: false, reason: "server_error" };
     return { ok: true, pkg: await res.json() };
   } catch {
-    return { ok: false, reason: "network_error" };
+    return normalizedCode === DEMO_PACKAGE.code ? { ok: true, pkg: DEMO_PACKAGE } : { ok: false, reason: "network_error" };
   }
 }
 
