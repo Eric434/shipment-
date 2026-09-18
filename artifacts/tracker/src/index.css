@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -122,71 +121,37 @@
   pointer-events: none;
 }
 
-/* Leaflet map styles — complete removal of tile borders, grid lines, and seams */
-.leaflet-container { 
-  background: #080808 !important; 
-  font-family: 'Inter', sans-serif;
-  outline: none !important;
-}
-
-/* Remove all table/grid lines, border outlines, and gaps from tiles */
-.leaflet-container img,
-.leaflet-tile,
-.leaflet-tile-container,
-.leaflet-tile-container img,
-.leaflet-tile-pane img,
-.leaflet-pane img,
-img.leaflet-tile {
-  border: none !important;
-  border-width: 0 !important;
-  border-style: none !important;
-  border-color: transparent !important;
-  outline: none !important;
-  box-shadow: none !important;
-  max-width: none !important;
-  max-height: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  -webkit-user-drag: none;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  image-rendering: auto;
-}
-
-.leaflet-tile-container {
+/* Tesla Vehicle Marker & Google Maps Custom Styles */
+.tesla-vehicle-marker {
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease;
   will-change: transform;
-}
-
-.leaflet-marker-icon.tesla-vehicle-marker {
-  transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease;
-  will-change: transform;
-}
-.leaflet-zoom-anim .leaflet-marker-icon.tesla-vehicle-marker {
-  transition: none !important;
 }
 .vehicle-pulse-glow {
   animation: ping-live 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
-.leaflet-control-zoom a {
-  background: #141414 !important;
-  color: #e0e0e0 !important;
-  border-color: #222 !important;
+
+/* Google Maps InfoWindow Dark Luxury Theme */
+.gm-style .gm-style-iw-c {
+  background-color: #0c0d10 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85) !important;
+  padding: 8px 12px !important;
 }
-.leaflet-control-zoom a:hover { background: #1e1e1e !important; }
-.leaflet-control-attribution {
-  background: rgba(8,8,8,0.9) !important;
-  color: #444 !important;
-  font-size: 9px !important;
+.gm-style .gm-style-iw-d {
+  overflow: hidden !important;
 }
-.leaflet-control-attribution a { color: #666 !important; }
-.leaflet-popup-content-wrapper {
-  background: #111 !important;
-  color: #e5e5e5 !important;
-  border: 1px solid #222 !important;
-  border-radius: 8px !important;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.8) !important;
+.gm-style .gm-style-iw-tc::after {
+  background-color: #0c0d10 !important;
 }
-.leaflet-popup-tip { background: #111 !important; }
+.gm-style .gm-ui-hover-effect {
+  filter: invert(1) grayscale(1);
+}
+
+/* Hide default Google Maps clutter buttons when using custom Tesla UI */
+.gm-bundled-control {
+  display: none !important;
+}
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; }

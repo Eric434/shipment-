@@ -15,6 +15,9 @@ export default defineConfig({
     "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ""
     ),
+    "import.meta.env.VITE_GOOGLE_MAPS_API_KEY": JSON.stringify(
+      process.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAm1SX3n0O31_v6OpWyf4hWfk9XviUhibk"
+    ),
   },
   plugins: [
     react(),

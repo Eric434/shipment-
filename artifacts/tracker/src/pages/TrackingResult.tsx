@@ -1,24 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import L from "leaflet";
 import {
   ArrowLeft, Package, CheckCircle2, Circle, MapPin, Clock,
   Bell, BellOff, Play, Pause, RotateCcw, Navigation,
   Loader2, AlertCircle, Wifi, ChevronRight, Gauge,
   X, List, FileText, Download, Compass, Lock, CheckSquare,
   Calendar, CalendarDays, Crosshair, Map as MapIcon,
-  Sun, Moon, Check, FastForward,
+  Sun, Moon, Check, FastForward, Plus, Minus, Layers, Maximize2,
 } from "lucide-react";
 import { fetchPackage, subscribeToAlerts, notifyDelivered, type Package as Pkg, type FetchPackageResult } from "@/lib/api";
 import { MapLibreNavigationHUD } from "@/components/MapLibreNavigation";
 import { TeslaVehicleDashboard } from "@/components/TeslaVehicleDashboard";
+import { loadGoogleMaps, TESLA_DARK_MAP_STYLES } from "@/lib/googleMaps";
 
-// ─── Permanent Dark Basemap Configuration (Stadia Alidade Dark) ─────────
-const STADIA_DARK_BASEMAP = {
-  url: "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
-  attribution: '&copy; <a href="https://stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
-  maxZoom: 20,
-  supportsRetina: true,
-};
+declare const google: any;
 
 // ─── Route normalization + interpolation ──────────────────────────────────────
 
@@ -1200,12 +1194,18 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
   const deliveryFiredRef = useRef(false);
 
+  const [mapTheme, setMapTheme] = useState<"dark" | "satellite" | "roadmap">("dark");
+  const [mapLoading, setMapLoading] = useState(true);
+  const [mapError, setMapError] = useState<string | null>(null);
+
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const vehicleMarkerRef = useRef<L.Marker | null>(null);
-  const donePolyRef = useRef<L.Polyline | null>(null);
-  const remainPolyRef = useRef<L.Polyline | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const googleRef = useRef<any>(null);
+  const vehicleOverlayRef = useRef<any>(null);
+  const donePolyRef = useRef<any>(null);
+  const remainPolyRef = useRef<any>(null);
+  const originMarkerRef = useRef<any>(null);
+  const destMarkerRef = useRef<any>(null);
 
   useEffect(() => {
     const t = setInterval(() => { setCurrentTime(new Date()); setSecsAgo((s) => s + 1); }, 1000);
@@ -1233,23 +1233,17 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
 
   useEffect(() => {
     const pos = fullPath[posIdx];
-    if (!pos) return;
-    vehicleMarkerRef.current?.setLatLng(pos);
-    donePolyRef.current?.setLatLngs(fullPath.slice(0, posIdx + 1));
-    remainPolyRef.current?.setLatLngs(fullPath.slice(posIdx));
+    if (!pos || !googleRef.current) return;
     const next = fullPath[Math.min(posIdx + 1, TOTAL - 1)];
     const prev = fullPath[Math.max(posIdx - 1, 0)];
     const b = posIdx < TOTAL - 1 ? getBearing(pos, next) : getBearing(prev, pos);
     setBearing(b);
     const isMoving = playing && posIdx < TOTAL - 1;
-    vehicleMarkerRef.current?.setIcon(
-      L.divIcon({
-        html: vehicleMarkerHtml(isMoving, b),
-        className: "tesla-vehicle-marker",
-        iconSize: [28, 44],
-        iconAnchor: [14, 22],
-      })
-    );
+
+    const latLng = new googleRef.current.maps.LatLng(pos[0], pos[1]);
+    vehicleOverlayRef.current?.setPositionAndState(latLng, isMoving, b);
+    donePolyRef.current?.setPath(fullPath.slice(0, posIdx + 1).map((p) => ({ lat: p[0], lng: p[1] })));
+    remainPolyRef.current?.setPath(fullPath.slice(posIdx).map((p) => ({ lat: p[0], lng: p[1] })));
   }, [posIdx, playing]);
 
   // Smooth camera tracking when following is active
@@ -1257,90 +1251,190 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
     if (!mapInstanceRef.current || !isCameraFollowing) return;
     const pos = fullPath[posIdx];
     if (pos) {
-      mapInstanceRef.current.panTo(pos, { animate: true, duration: 0.8, easeLinearity: 0.25 });
+      mapInstanceRef.current.panTo({ lat: pos[0], lng: pos[1] });
     }
   }, [posIdx, isCameraFollowing]);
 
   useEffect(() => {
-    if (mapInstanceRef.current) {
-      setTimeout(() => mapInstanceRef.current?.invalidateSize(), 300);
+    if (mapInstanceRef.current && googleRef.current) {
+      setTimeout(() => {
+        if (mapInstanceRef.current && googleRef.current) {
+          googleRef.current.maps.event.trigger(mapInstanceRef.current, "resize");
+        }
+      }, 300);
     }
   }, [drawerOpen]);
 
   useEffect(() => {
     if (!mapRef.current) return;
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.remove();
-      mapInstanceRef.current = null;
-    }
-    // Prevent Leaflet "Map container is already initialized" error across re-renders
-    if ((mapRef.current as any)._leaflet_id) {
-      delete (mapRef.current as any)._leaflet_id;
-    }
-    const initPos = fullPath[startIdx];
-    const map = L.map(mapRef.current, { center: initPos, zoom: 12, zoomControl: false });
+    let isMounted = true;
+    setMapLoading(true);
+    setMapError(null);
 
-    // Detect user manual map interaction to release camera lock
-    map.on("dragstart", () => {
-      setIsCameraFollowing(false);
+    loadGoogleMaps().then((g) => {
+      if (!isMounted || !mapRef.current) return;
+      googleRef.current = g;
+
+      const initPos = fullPath[startIdx];
+      const map = new g.maps.Map(mapRef.current, {
+        center: { lat: initPos[0], lng: initPos[1] },
+        zoom: 12,
+        disableDefaultUI: true,
+        styles: TESLA_DARK_MAP_STYLES,
+        backgroundColor: "#080808",
+        gestureHandling: "greedy",
+      });
+
+      g.maps.event.addListener(map, "dragstart", () => {
+        setIsCameraFollowing(false);
+      });
+
+      // Done polyline (Completed route - red)
+      const donePoly = new g.maps.Polyline({
+        path: fullPath.slice(0, startIdx + 1).map((p) => ({ lat: p[0], lng: p[1] })),
+        geodesic: true,
+        strokeColor: "#ef4444",
+        strokeOpacity: 0.95,
+        strokeWeight: 4,
+        map,
+      });
+      donePolyRef.current = donePoly;
+
+      // Remaining polyline (Remaining route - blue)
+      const remainPoly = new g.maps.Polyline({
+        path: fullPath.slice(startIdx).map((p) => ({ lat: p[0], lng: p[1] })),
+        geodesic: true,
+        strokeColor: "#3b82f6",
+        strokeOpacity: 0.7,
+        strokeWeight: 3,
+        map,
+      });
+      remainPolyRef.current = remainPoly;
+
+      // Origin Marker
+      const originMarker = new g.maps.Marker({
+        position: { lat: fullPath[0][0], lng: fullPath[0][1] },
+        map,
+        title: `Origin: ${pkg.origin}`,
+        icon: {
+          path: g.maps.SymbolPath.CIRCLE,
+          scale: 6,
+          fillColor: "#71717a",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        },
+      });
+      originMarkerRef.current = originMarker;
+
+      const originInfo = new g.maps.InfoWindow({
+        content: `<div style="color:#09090b;padding:4px 6px;font-family:system-ui,-apple-system,sans-serif;"><div style="font-size:10px;font-weight:700;color:#ef4444;letter-spacing:0.05em;">ORIGIN HUB</div><div style="font-size:12px;font-weight:600;margin-top:2px;">${pkg.origin}</div></div>`,
+      });
+      originMarker.addListener("click", () => originInfo.open(map, originMarker));
+
+      // Destination Marker
+      const destMarker = new g.maps.Marker({
+        position: { lat: fullPath[TOTAL - 1][0], lng: fullPath[TOTAL - 1][1] },
+        map,
+        title: `Destination: ${pkg.destination}`,
+        icon: {
+          path: g.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: "#10b981",
+          fillOpacity: 1,
+          strokeColor: "#34d399",
+          strokeWeight: 2.5,
+        },
+      });
+      destMarkerRef.current = destMarker;
+
+      const destInfo = new g.maps.InfoWindow({
+        content: `<div style="color:#09090b;padding:4px 6px;font-family:system-ui,-apple-system,sans-serif;"><div style="font-size:10px;font-weight:700;color:#10b981;letter-spacing:0.05em;">FINAL DESTINATION</div><div style="font-size:12px;font-weight:600;margin-top:2px;">${pkg.destination}</div></div>`,
+      });
+      destMarker.addListener("click", () => destInfo.open(map, destMarker));
+
+      const initNext = fullPath[Math.min(startIdx + 1, TOTAL - 1)];
+      const initBearing = startIdx < TOTAL - 1 ? getBearing(initPos, initNext) : 0;
+      setBearing(initBearing);
+
+      // Custom Vehicle Overlay with heading angle rotation
+      class VehicleOverlay extends g.maps.OverlayView {
+        private div: HTMLDivElement | null = null;
+        private pos: any;
+        private moving: boolean;
+        private brg: number;
+
+        constructor(pos: any, moving: boolean, brg: number) {
+          super();
+          this.pos = pos;
+          this.moving = moving;
+          this.brg = brg;
+        }
+
+        onAdd() {
+          this.div = document.createElement("div");
+          this.div.style.position = "absolute";
+          this.div.style.cursor = "pointer";
+          this.div.style.zIndex = "1000";
+          this.div.className = "tesla-vehicle-marker";
+          this.div.innerHTML = vehicleMarkerHtml(this.moving, this.brg);
+          const panes = this.getPanes();
+          panes?.overlayMouseTarget.appendChild(this.div);
+        }
+
+        setPositionAndState(pos: any, moving: boolean, brg: number) {
+          this.pos = pos;
+          this.moving = moving;
+          this.brg = brg;
+          if (this.div) {
+            this.div.innerHTML = vehicleMarkerHtml(this.moving, this.brg);
+          }
+          this.draw();
+        }
+
+        draw() {
+          if (!this.div) return;
+          const projection = this.getProjection();
+          if (!projection) return;
+          const point = projection.fromLatLngToDivPixel(this.pos);
+          if (point) {
+            this.div.style.left = `${point.x - 14}px`;
+            this.div.style.top = `${point.y - 22}px`;
+          }
+        }
+
+        onRemove() {
+          if (this.div?.parentNode) {
+            this.div.parentNode.removeChild(this.div);
+            this.div = null;
+          }
+        }
+      }
+
+      const initLatLng = new g.maps.LatLng(initPos[0], initPos[1]);
+      const vehicleOverlay = new VehicleOverlay(initLatLng, pkg.status !== "Delivered", initBearing);
+      vehicleOverlay.setMap(map);
+      vehicleOverlayRef.current = vehicleOverlay;
+
+      mapInstanceRef.current = map;
+      setMapLoading(false);
+    }).catch((err) => {
+      console.error("Google Maps Platform initialization failed:", err);
+      if (isMounted) {
+        setMapError("Unable to load Google Maps Platform. Please verify network connectivity.");
+        setMapLoading(false);
+      }
     });
 
-    // Permanent Stadia Alidade Dark Map
-    const isRetina = typeof window !== "undefined" && (window.devicePixelRatio || 1) > 1;
-    const tileUrl = STADIA_DARK_BASEMAP.url.replace("{r}", isRetina ? "@2x" : "");
-
-    const initialLayer = L.tileLayer(tileUrl, {
-      attribution: STADIA_DARK_BASEMAP.attribution,
-      maxZoom: STADIA_DARK_BASEMAP.maxZoom,
-    }).addTo(map);
-    tileLayerRef.current = initialLayer;
-
-    L.control.zoom({ position: "bottomright" }).addTo(map);
-
-    donePolyRef.current = L.polyline(fullPath.slice(0, startIdx + 1), {
-      color: "#ef4444", weight: 3.5, opacity: 0.95,
-    }).addTo(map);
-
-    remainPolyRef.current = L.polyline(fullPath.slice(startIdx), {
-      color: "#3b82f6", weight: 3, opacity: 0.6, dashArray: "8 6",
-    }).addTo(map);
-
-    L.marker(fullPath[0], {
-      icon: L.divIcon({
-        html: `<div style="width:12px;height:12px;background:#555;border:2px solid #aaa;border-radius:50%;box-shadow:0 0 8px rgba(255,255,255,0.3);"></div>`,
-        className: "", iconSize: [12, 12], iconAnchor: [6, 6],
-      }),
-    }).addTo(map).bindPopup(`<b>Origin</b><br>${pkg.origin}`);
-
-    L.marker(fullPath[TOTAL - 1], {
-      icon: L.divIcon({
-        html: `<div style="width:15px;height:15px;background:#10b981;border:2px solid #34d399;border-radius:50%;box-shadow:0 0 14px rgba(16,185,129,0.9);"></div>`,
-        className: "", iconSize: [15, 15], iconAnchor: [7.5, 7.5],
-      }),
-    }).addTo(map).bindPopup(`<b>Destination</b><br>${pkg.destination}`);
-
-    const initNext = fullPath[Math.min(startIdx + 1, TOTAL - 1)];
-    const initBearing = startIdx < TOTAL - 1 ? getBearing(initPos, initNext) : 0;
-    setBearing(initBearing);
-
-    vehicleMarkerRef.current = L.marker(initPos, {
-      icon: L.divIcon({
-        html: vehicleMarkerHtml(pkg.status !== "Delivered", initBearing),
-        className: "tesla-vehicle-marker",
-        iconSize: [28, 44],
-        iconAnchor: [14, 22],
-      }),
-      zIndexOffset: 1000,
-    }).addTo(map).bindPopup(`<b>${pkg.status}</b>`);
-
-    mapInstanceRef.current = map;
     return () => {
-      map.remove();
+      isMounted = false;
+      vehicleOverlayRef.current?.setMap(null);
+      donePolyRef.current?.setMap(null);
+      remainPolyRef.current?.setMap(null);
+      originMarkerRef.current?.setMap(null);
+      destMarkerRef.current?.setMap(null);
       mapInstanceRef.current = null;
-      tileLayerRef.current = null;
-      vehicleMarkerRef.current = null;
-      donePolyRef.current = null;
-      remainPolyRef.current = null;
+      googleRef.current = null;
     };
   }, []);
 
@@ -1348,19 +1442,46 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
     setIsCameraFollowing(true);
     const pos = fullPath[posIdx];
     if (pos && mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo(pos, 14, { duration: 1 });
+      mapInstanceRef.current.panTo({ lat: pos[0], lng: pos[1] });
+      mapInstanceRef.current.setZoom(14);
     }
   }, [fullPath, posIdx]);
 
   const handleToggleOverview = useCallback(() => {
     setIsCameraFollowing(false);
-    if (mapInstanceRef.current && fullPath.length > 0) {
-      mapInstanceRef.current.fitBounds(L.latLngBounds(fullPath), {
-        padding: [80, 80],
-        duration: 1,
-      });
+    if (mapInstanceRef.current && fullPath.length > 0 && googleRef.current) {
+      const bounds = new googleRef.current.maps.LatLngBounds();
+      fullPath.forEach((p) => bounds.extend({ lat: p[0], lng: p[1] }));
+      mapInstanceRef.current.fitBounds(bounds, 80);
     }
   }, [fullPath]);
+
+  const handleSwitchMapTheme = (theme: "dark" | "satellite" | "roadmap") => {
+    setMapTheme(theme);
+    if (!mapInstanceRef.current) return;
+    if (theme === "satellite") {
+      mapInstanceRef.current.setMapTypeId("hybrid");
+      mapInstanceRef.current.setOptions({ styles: [] });
+    } else if (theme === "roadmap") {
+      mapInstanceRef.current.setMapTypeId("roadmap");
+      mapInstanceRef.current.setOptions({ styles: [] });
+    } else {
+      mapInstanceRef.current.setMapTypeId("roadmap");
+      mapInstanceRef.current.setOptions({ styles: TESLA_DARK_MAP_STYLES });
+    }
+  };
+
+  const handleZoomIn = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setZoom((mapInstanceRef.current.getZoom() || 12) + 1);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setZoom((mapInstanceRef.current.getZoom() || 12) - 1);
+    }
+  };
 
   const handleReset = useCallback(() => {
     setPosIdx(startIdx); setSecsAgo(0); setPlaying(true);
@@ -1398,8 +1519,116 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
   return (
     <div className="relative bg-[#080808] text-white overflow-hidden animate-fade-in" style={{ height: "100dvh", width: "100vw" }}>
 
-      {/* ══ FULL-SCREEN MAP ══════════════════════════════════════════════════════ */}
-      <div ref={mapRef} className="absolute inset-0 z-0" />
+      {/* ══ FULL-SCREEN GOOGLE MAP ══════════════════════════════════════════════════ */}
+      <div ref={mapRef} className="absolute inset-0 z-0 bg-[#080808]" />
+
+      {/* Google Maps Loading State */}
+      {mapLoading && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#080808]/90 backdrop-blur-sm gap-3 pointer-events-none">
+          <Loader2 className="w-7 h-7 text-red-500 animate-spin" />
+          <span className="text-xs font-mono text-white/60 tracking-wider">LOADING GOOGLE MAPS PLATFORM...</span>
+        </div>
+      )}
+
+      {/* Google Maps Error Banner */}
+      {mapError && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 bg-red-950/90 border border-red-500/40 rounded-xl px-4 py-2.5 text-xs text-red-200 flex items-center gap-2 shadow-2xl backdrop-blur-md">
+          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+          <span>{mapError}</span>
+        </div>
+      )}
+
+      {/* Google Maps Controls (Map Type switcher, Zoom & Overview) */}
+      <div className="absolute bottom-20 left-3 z-20 pointer-events-auto flex flex-col gap-2">
+        {/* Map Type Switcher */}
+        <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-xl p-1 flex items-center gap-1 shadow-xl">
+          <button
+            onClick={() => handleSwitchMapTheme("dark")}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-medium flex items-center gap-1.5 transition-all ${
+              mapTheme === "dark"
+                ? "bg-red-600/25 text-red-400 border border-red-600/30 font-semibold"
+                : "text-white/40 hover:text-white/80"
+            }`}
+            title="Tesla Dark Vector Map"
+          >
+            <Moon className="w-3 h-3" />
+            <span>Dark</span>
+          </button>
+          <button
+            onClick={() => handleSwitchMapTheme("satellite")}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-medium flex items-center gap-1.5 transition-all ${
+              mapTheme === "satellite"
+                ? "bg-red-600/25 text-red-400 border border-red-600/30 font-semibold"
+                : "text-white/40 hover:text-white/80"
+            }`}
+            title="Google Earth Satellite & Roads"
+          >
+            <Layers className="w-3 h-3" />
+            <span>Satellite</span>
+          </button>
+          <button
+            onClick={() => handleSwitchMapTheme("roadmap")}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-medium flex items-center gap-1.5 transition-all ${
+              mapTheme === "roadmap"
+                ? "bg-red-600/25 text-red-400 border border-red-600/30 font-semibold"
+                : "text-white/40 hover:text-white/80"
+            }`}
+            title="Google Maps Roadmap"
+          >
+            <MapIcon className="w-3 h-3" />
+            <span>Roadmap</span>
+          </button>
+        </div>
+
+        {/* Camera and Zoom Controls */}
+        <div className="flex items-center gap-1.5">
+          <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-xl p-1 flex items-center gap-0.5 shadow-xl">
+            <button
+              onClick={handleZoomIn}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+              title="Zoom In"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            <div className="w-px h-4 bg-white/10" />
+            <button
+              onClick={handleZoomOut}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+              title="Zoom Out"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-xl p-1 flex items-center gap-0.5 shadow-xl">
+            <button
+              onClick={handleRecenterCamera}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
+                isCameraFollowing
+                  ? "bg-red-600/20 text-red-400 border border-red-600/30"
+                  : "text-white/60 hover:text-white hover:bg-white/10"
+              }`}
+              title="Recenter to Vehicle"
+            >
+              <Crosshair className="w-4 h-4" />
+            </button>
+            <div className="w-px h-4 bg-white/10" />
+            <button
+              onClick={handleToggleOverview}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+              title="Route Overview"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Google Maps Platform Badge */}
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/80 border border-white/8 text-[9px] text-white/40 w-fit backdrop-blur-sm">
+          <MapPin className="w-2.5 h-2.5 text-red-500" />
+          <span>Google Maps Platform</span>
+        </div>
+      </div>
 
       {/* ══ FLOATING HEADER ═════════════════════════════════════════════════════ */}
       <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">

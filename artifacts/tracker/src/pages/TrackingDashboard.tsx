@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import L from "leaflet";
 import { TeslaLogo, TeslaT } from "@/components/TeslaLogo";
 import {
   Battery,
@@ -15,7 +14,11 @@ import {
   ChevronRight,
   Activity,
   Shield,
+  Loader2,
 } from "lucide-react";
+import { loadGoogleMaps, TESLA_DARK_MAP_STYLES } from "@/lib/googleMaps";
+
+declare const google: any;
 
 const VEHICLES = [
   {
@@ -100,38 +103,25 @@ const VEHICLES = [
   },
 ];
 
-function createVehicleMarker(vehicle: (typeof VEHICLES)[0], isSelected: boolean) {
-  const size = isSelected ? 18 : 14;
-  const pulse = vehicle.status === "Moving";
+function getMarkerIcon(g: any, vehicle: (typeof VEHICLES)[0], isSelected: boolean) {
   const batteryLow = vehicle.battery < 25;
   const color = batteryLow ? "#f59e0b" : isSelected ? "#dc2626" : "#e5e5e5";
-
-  const html = `
-    <div style="
-      width: ${size}px;
-      height: ${size}px;
-      background: ${color};
-      border: 2px solid ${isSelected ? "#ff4444" : "#555"};
-      border-radius: 50%;
-      box-shadow: 0 0 ${isSelected ? "12px" : "4px"} ${isSelected ? "rgba(220,38,38,0.8)" : "rgba(0,0,0,0.5)"};
-      ${pulse && isSelected ? "animation: pulse-red 2s infinite;" : ""}
-      cursor: pointer;
-      transition: all 0.2s;
-    "></div>
-  `;
-
-  return L.divIcon({
-    html,
-    className: "",
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
+  return {
+    path: g.maps.SymbolPath.CIRCLE,
+    scale: isSelected ? 9 : 6.5,
+    fillColor: color,
+    fillOpacity: 1,
+    strokeColor: isSelected ? "#ef4444" : "#27272a",
+    strokeWeight: isSelected ? 3 : 2,
+  };
 }
 
 export default function TrackingDashboard() {
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<Record<number, L.Marker>>({});
+  const mapInstanceRef = useRef<any>(null);
+  const googleRef = useRef<any>(null);
+  const markersRef = useRef<Record<number, any>>({});
+  const [mapLoading, setMapLoading] = useState(true);
   const [selectedVehicle, setSelectedVehicle] = useState(VEHICLES[0]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [sidebarTab, setSidebarTab] = useState<"fleet" | "alerts">("fleet");
@@ -148,53 +138,67 @@ export default function TrackingDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
+    if (!mapRef.current) return;
+    let isMounted = true;
 
-    const map = L.map(mapRef.current, {
-      center: [37.6, -122.1],
-      zoom: 10,
-      zoomControl: false,
+    loadGoogleMaps().then((g) => {
+      if (!isMounted || !mapRef.current) return;
+      googleRef.current = g;
+
+      const map = new g.maps.Map(mapRef.current, {
+        center: { lat: 37.6, lng: -122.1 },
+        zoom: 10,
+        disableDefaultUI: true,
+        styles: TESLA_DARK_MAP_STYLES,
+        backgroundColor: "#080808",
+      });
+
+      VEHICLES.forEach((vehicle) => {
+        const marker = new g.maps.Marker({
+          position: { lat: vehicle.lat, lng: vehicle.lng },
+          map,
+          title: `${vehicle.name} (${vehicle.plate})`,
+          icon: getMarkerIcon(g, vehicle, vehicle.id === selectedVehicle.id),
+        });
+
+        marker.addListener("click", () => {
+          setSelectedVehicle(vehicle);
+        });
+
+        markersRef.current[vehicle.id] = marker;
+      });
+
+      mapInstanceRef.current = map;
+      setMapLoading(false);
+    }).catch((err) => {
+      console.error("Dashboard Google Maps failed to load:", err);
+      if (isMounted) setMapLoading(false);
     });
-
-    L.tileLayer("https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
-      maxZoom: 20,
-    }).addTo(map);
-
-    L.control.zoom({ position: "bottomright" }).addTo(map);
-
-    VEHICLES.forEach((vehicle) => {
-      const marker = L.marker([vehicle.lat, vehicle.lng], {
-        icon: createVehicleMarker(vehicle, vehicle.id === selectedVehicle.id),
-      })
-        .addTo(map)
-        .on("click", () => setSelectedVehicle(vehicle));
-
-      markersRef.current[vehicle.id] = marker;
-    });
-
-    mapInstanceRef.current = map;
 
     return () => {
-      map.remove();
+      isMounted = false;
+      Object.values(markersRef.current).forEach((m: any) => m.setMap?.(null));
+      markersRef.current = {};
       mapInstanceRef.current = null;
+      googleRef.current = null;
     };
   }, []);
 
   useEffect(() => {
+    if (!googleRef.current) return;
+    const g = googleRef.current;
     VEHICLES.forEach((vehicle) => {
       const marker = markersRef.current[vehicle.id];
       if (marker) {
-        marker.setIcon(createVehicleMarker(vehicle, vehicle.id === selectedVehicle.id));
+        marker.setIcon(getMarkerIcon(g, vehicle, vehicle.id === selectedVehicle.id));
       }
     });
 
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.setView(
-        [selectedVehicle.lat, selectedVehicle.lng],
-        13,
-        { animate: true }
-      );
+      mapInstanceRef.current.panTo({
+        lat: selectedVehicle.lat,
+        lng: selectedVehicle.lng,
+      });
     }
   }, [selectedVehicle]);
 
@@ -398,8 +402,23 @@ export default function TrackingDashboard() {
         </aside>
 
         {/* Map */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative bg-[#080808]">
           <div ref={mapRef} className="w-full h-full" />
+
+          {mapLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#080808]/85 backdrop-blur-sm z-10 pointer-events-none gap-2">
+              <Loader2 className="w-6 h-6 text-red-500 animate-spin" />
+              <span className="text-[10px] font-mono text-white/50 tracking-wider">LOADING FLEET MAP...</span>
+            </div>
+          )}
+
+          {/* Google Maps Platform Badge */}
+          <div className="absolute top-4 right-4 z-10 pointer-events-none">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/80 border border-white/10 text-[9px] text-white/40 shadow-lg backdrop-blur-sm">
+              <MapPin className="w-2.5 h-2.5 text-red-500" />
+              <span>Google Maps Platform</span>
+            </div>
+          </div>
 
           {/* Map overlay: vehicle info */}
           <div className="absolute bottom-5 left-5 right-5 z-10 pointer-events-none">
