@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import {
   Search, MapPin, Bell, TrendingUp, ArrowUp,
-  ChevronRight, Zap, Clock, Shield,
+  ChevronRight, Zap, Clock, Shield, Menu, X, ArrowUpRight,
   Plane, Ship, Truck, Train, Package, Warehouse,
 } from "lucide-react";
 
@@ -78,25 +78,59 @@ interface Props { onTrack: (code: string) => void; }
 export default function LandingPage({ onTrack }: Props) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = () => { const v = query.trim().toUpperCase(); if (v) onTrack(v); };
 
   return (
-    <div className="min-h-dvh bg-[#0a0a0a] text-white" ref={topRef}>
+    <div id="top" className="min-h-dvh bg-[#0a0a0a] text-white" ref={topRef}>
 
       {/* ─── NAV ─── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 md:px-8 py-3 md:py-4 border-b border-white/6 bg-[#0a0a0a]/92 backdrop-blur-md">
-        <div className="flex items-center gap-2.5">
-          <img src="/tesla-logo.png" alt="TeslaTrack" className="logo-spin w-10 h-10 object-contain" />
-          <span className="text-sm font-semibold tracking-widest uppercase text-white/90">
-            Tesla<span className="text-red-500">Track</span>
-          </span>
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/6 bg-[#0a0a0a]/92 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-8 md:py-4">
+          <a href="#top" aria-label="TeslaTrack home" className="flex items-center gap-2.5" onClick={() => setMenuOpen(false)}>
+            <img src="/tesla-logo.png" alt="TeslaTrack" className="logo-spin size-10 object-contain" />
+            <span className="text-sm font-semibold tracking-widest uppercase text-white/90">
+              Tesla<span className="text-red-500">Track</span>
+            </span>
+          </a>
+
+          <div className="hidden items-center gap-8 md:flex">
+            <a href="#features" className="text-xs text-white/45 transition-colors hover:text-white">Features</a>
+            <a href="#how-it-works" className="text-xs text-white/45 transition-colors hover:text-white">How it works</a>
+            <a href="#coverage" className="text-xs text-white/45 transition-colors hover:text-white">Coverage</a>
+            <a href="#track" className="group flex items-center gap-1.5 rounded-full border border-white/12 px-4 py-2 text-xs font-medium text-white transition-colors hover:border-red-500/50 hover:bg-red-500/10">
+              Track a shipment <ArrowUpRight className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" data-icon="inline-end" />
+            </a>
+          </div>
+
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-controls="mobile-navigation"
+            aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+            onClick={() => setMenuOpen((open) => !open)}
+            className="flex size-10 items-center justify-center rounded-lg border border-white/10 text-white/70 transition-colors hover:border-white/25 hover:text-white md:hidden"
+          >
+            {menuOpen ? <X data-icon="inline-start" /> : <Menu data-icon="inline-start" />}
+          </button>
         </div>
-        <div className="flex items-center gap-4 md:gap-6">
-          <a href="#features" className="text-xs text-white/40 hover:text-white/70 transition-colors">Features</a>
-          <a href="#how-it-works" className="text-xs text-white/40 hover:text-white/70 transition-colors">How it works</a>
-        </div>
+
+        {menuOpen && (
+          <div id="mobile-navigation" className="border-t border-white/6 px-4 pb-4 pt-2 md:hidden">
+            <div className="flex flex-col gap-1 rounded-xl border border-white/8 bg-white/[0.03] p-2">
+              {[{ href: "#features", label: "Features" }, { href: "#how-it-works", label: "How it works" }, { href: "#coverage", label: "Coverage" }].map((item) => (
+                <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-3 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white">
+                  {item.label}
+                </a>
+              ))}
+              <a href="#track" onClick={() => setMenuOpen(false)} className="mt-1 rounded-lg bg-red-600 px-3 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-red-500">
+                Track a shipment
+              </a>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* ─── HERO ─── */}
@@ -140,7 +174,7 @@ export default function LandingPage({ onTrack }: Props) {
         </p>
 
         {/* Search bar */}
-        <div className="relative z-10 w-full max-w-xl animate-slide-up" style={{ animationDelay: "0.3s" }}>
+        <div id="track" className="relative z-10 w-full max-w-xl scroll-mt-24 animate-slide-up" style={{ animationDelay: "0.3s" }}>
           <div className={`flex items-center gap-3 bg-[#111]/90 border rounded-xl px-4 py-3.5 transition-all duration-300 backdrop-blur ${
             focused ? "border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.12)]" : "border-white/10"
           }`}>
@@ -184,7 +218,7 @@ export default function LandingPage({ onTrack }: Props) {
       </section>
 
       {/* ─── TRANSPORT NETWORK ─── */}
-      <section className="py-20 px-6">
+      <section id="coverage" className="scroll-mt-24 px-6 py-20">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <p className="text-[10px] text-red-500/70 tracking-[0.3em] uppercase mb-3">Coverage</p>
