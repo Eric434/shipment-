@@ -224,28 +224,26 @@ export default function TrackingDashboard() {
   const movingCount = VEHICLES.filter((v) => v.status === "Moving").length;
 
   return (
-    <div className="flex flex-col h-dvh bg-black text-white overflow-hidden">
+    <div className="mx-auto flex h-dvh w-full max-w-[430px] flex-col overflow-hidden bg-[#070707] text-white shadow-2xl">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-white/8 bg-black/95 backdrop-blur-sm z-20 flex-shrink-0">
-        <div className="flex items-center gap-4">
+      <header className="z-20 flex flex-shrink-0 items-center justify-between border-b border-white/8 bg-black/95 px-4 py-3.5 backdrop-blur-sm">
+        <div className="flex min-w-0 items-center gap-2.5">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 text-red-600">
+            <div className="h-6 w-6 flex-shrink-0 text-red-600">
               <TeslaT className="w-full h-full text-red-600" />
             </div>
-            <TeslaLogo className="h-4 text-white" />
+            <TeslaLogo className="h-3.5 text-white" />
           </div>
           <div className="w-px h-5 bg-white/10" />
-          <span className="text-xs tracking-[0.3em] text-white/40 uppercase font-medium">
+          <span className="hidden text-[9px] font-medium uppercase tracking-[0.24em] text-white/40 min-[390px]:inline">
             Fleet Tracker
           </span>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2.5">
           <div className="flex items-center gap-2 text-xs text-white/40">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-            <span>
-              {movingCount} / {VEHICLES.length} Active
-            </span>
+            <span className="hidden min-[390px]:inline">\n              {movingCount} / {VEHICLES.length} Active\n            </span>
           </div>
           {totalAlerts > 0 && (
             <div className="flex items-center gap-1.5 bg-red-600/10 border border-red-600/30 rounded px-2.5 py-1">
@@ -257,7 +255,7 @@ export default function TrackingDashboard() {
             <Wifi className="w-3.5 h-3.5 text-green-400" />
             <span>Live</span>
           </div>
-          <div className="text-xs text-white/30 font-mono">
+          <div className="hidden text-[10px] font-mono text-white/30 min-[390px]:block">
             {currentTime.toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
@@ -267,9 +265,9 @@ export default function TrackingDashboard() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {/* Left Sidebar */}
-        <aside className="w-72 bg-black border-r border-white/8 flex flex-col flex-shrink-0 z-10">
+        <aside className="hidden w-72 bg-black border-r border-white/8 flex-col flex-shrink-0 z-10">
           {/* Tabs */}
           <div className="flex border-b border-white/8">
             <button
@@ -402,7 +400,7 @@ export default function TrackingDashboard() {
         </aside>
 
         {/* Map */}
-        <div className="flex-1 relative bg-[#080808]">
+        <div className="relative flex-1 bg-[#080808]">
           <div ref={mapRef} className="w-full h-full" />
 
           {mapLoading && (
@@ -421,8 +419,8 @@ export default function TrackingDashboard() {
           </div>
 
           {/* Map overlay: vehicle info */}
-          <div className="absolute bottom-5 left-5 right-5 z-10 pointer-events-none">
-            <div className="max-w-sm bg-black/85 backdrop-blur-md border border-white/10 rounded-xl p-4">
+          <div className="pointer-events-none absolute bottom-4 left-3 right-3 z-10">
+            <div className="max-w-sm rounded-2xl border border-white/10 bg-black/85 p-4 shadow-2xl backdrop-blur-md">
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <div className="flex items-center gap-2 mb-0.5">
@@ -483,7 +481,7 @@ export default function TrackingDashboard() {
           </div>
 
           {/* Top left overlay */}
-          <div className="absolute top-4 left-4 z-10">
+          <div className="absolute left-3 top-3 z-10">
             <div className="bg-black/90 border border-white/8 rounded-lg px-3 py-2 flex items-center gap-2">
               <Navigation className="w-3.5 h-3.5 text-red-500" />
               <span className="text-xs text-white/60">
@@ -493,7 +491,7 @@ export default function TrackingDashboard() {
           </div>
 
           {/* Driver info - top right */}
-          <div className="absolute top-4 right-4 z-10">
+          <div className="absolute right-3 top-3 z-10">
             <div className="bg-black/90 border border-white/8 rounded-lg px-3 py-2">
               <div className="text-[9px] text-white/30 uppercase tracking-wider mb-0.5">Driver</div>
               <div className="text-xs text-white/70">{selectedVehicle.driver}</div>
@@ -502,7 +500,7 @@ export default function TrackingDashboard() {
         </div>
 
         {/* Right Panel */}
-        <aside className="w-56 bg-black border-l border-white/8 flex flex-col flex-shrink-0 overflow-y-auto">
+        <aside className="hidden w-56 bg-black border-l border-white/8 flex-col flex-shrink-0 overflow-y-auto">
           <div className="p-4 border-b border-white/8">
             <div className="text-[9px] text-white/30 uppercase tracking-widest mb-3">
               Vehicle Details
