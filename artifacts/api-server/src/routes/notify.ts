@@ -1,5 +1,26 @@
 import { Router, type IRouter } from "express";
+import nodemailer from "nodemailer";
 import pool from "../lib/db";
+
+const mailer = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.GMAIL_SMTP_USER,
+    pass: process.env.GMAIL_SMTP_APP_PASSWORD,
+  },
+});
+
+function formatShipmentDetails(pkg: Record<string, unknown>) {
+  const details = [
+    ["Tracking code", pkg.code],
+    ["Status", "Delivered"],
+    ["Origin", pkg.from],
+    ["Destination", pkg.to],
+    ["Estimated delivery", pkg.eta],
+  ].filter(([, value]) => value != null && value !== "");
+
+  return details.map(([label, value]) => `${label}: ${value}`).join("\n");
+}
 
 const router: IRouter = Router();
 
@@ -43,8 +64,34 @@ router.post("/notify/delivered", async (req, res) => {
 
     // Get all subscribers for this package
     const subsRes = await pool.query("SELECT email FROM subscribers WHERE code = $1", [code]);
-    const sent = subsRes.rowCount ?? 0;
-    console.log(`[Alerts] Shipment ${code} delivered, notified ${sent} subscriber(s)`);
+    const subscribers = subsRes.rows as Array<{ email: string }>;
+    let sent = 0;
+
+    if (subscribers.length > 0) {
+      if (!process.env.GMAIL_SMTP_USER || !process.env.GMAIL_SMTP_APP_PASSWORD) {
+        throw new Error("Gmail SMTP credentials are not configured");
+      }
+
+      const details = formatShipmentDetails(pkgRes.rows[0] as Record<string, unknown>);
+      const results = await Promise.allSettled(
+        subscribers.map(({ email }) =>
+          mailer.sendMail({
+            from: `Shipment Alerts <${process.env.GMAIL_SMTP_USER}>`,
+            to: email,
+            subject: `Shipment ${code} has been delivered`,
+            text: `Your shipment has been delivered.\\n\\n${details}\\n\\nThank you for using Shipment Alerts.`,
+          })
+        )
+      );
+      sent = results.filter((result) => result.status === "fulfilled").length;
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          console.error(`[Alerts] Failed to notify ${subscribers[index].email}:`, result.reason);
+        }
+      });
+    }
+
+    console.log(`[Alerts] Shipment ${code} delivered, notified ${sent}/${subscribers.length} subscriber(s)`);
 
     // Update package status to Delivered in DB and mark all events as complete
     await pool.query("UPDATE packages SET status='Delivered', updated_at=NOW() WHERE code=$1", [code]);
