@@ -39,6 +39,10 @@ export default defineConfig({
     port: 3000,
     host: "0.0.0.0",
     allowedHosts: true,
+    // The hosted preview proxies HTTP but not the Vite HMR socket.
+    // Disable HMR so the injected Vite client does not retry a socket
+    // that can never be opened through the preview URL.
+    hmr: false,
   },
   preview: {
     port: 3000,
