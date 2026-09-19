@@ -22,6 +22,13 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    {
+      name: "disable-preview-hmr-client",
+      enforce: "post",
+      transformIndexHtml(html) {
+        return html.replace(/<script[^>]+src=["']\/@vite\/client["'][^>]*><\/script>/g, "");
+      },
+    },
   ],
   resolve: {
     alias: {
