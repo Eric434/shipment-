@@ -115,7 +115,7 @@ export async function subscribeToAlerts(payload: {
   eta: string;
   from: string;
   to: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; error?: string; emailSent?: boolean; smtpConfigured?: boolean }> {
   try {
     const res = await fetch(`${API}/notify/subscribe`, {
       method: "POST",
@@ -124,11 +124,82 @@ export async function subscribeToAlerts(payload: {
     });
     const data = await res.json();
     if (!res.ok) return { success: false, error: data.error ?? "Request failed" };
-    return { success: true };
+    return { success: true, emailSent: data.emailSent, smtpConfigured: data.smtpConfigured };
   } catch {
     return { success: false, error: "Network error — please try again" };
   }
 }
+
+export async function checkSmtpStatus(): Promise<{
+  configured: boolean;
+  user: string | null;
+  verified?: boolean;
+  message?: string;
+}> {
+  try {
+    const res = await fetch(`${API}/notify/smtp-status`);
+    if (!res.ok) return { configured: false, user: null };
+    return await res.json();
+  } catch {
+    return { configured: false, user: null };
+  }
+}
+
+export async function sendTestSmtpEmail(to: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API}/notify/smtp-test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { success: false, error: data.error || "Failed to send test email" };
+    return { success: true, messageId: data.messageId };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Network error" };
+  }
+}
+
+// ─── Google Maps Grounding & Place Intelligence ──────────────────────────────
+
+export interface MapsGroundingPlace {
+  title: string;
+  uri: string;
+  reviewSnippets?: string[];
+  source: string;
+}
+
+export interface MapsGroundingResult {
+  text: string;
+  places: MapsGroundingPlace[];
+  groundingChunks?: any[];
+  searchQueries?: string[];
+  isRateLimited?: boolean;
+  rateLimitReason?: string;
+}
+
+export async function queryMapsGrounding(payload: {
+  prompt: string;
+  location?: { latitude: number; longitude: number };
+  destinationAddress?: string;
+  trackingCode?: string;
+}): Promise<{ ok: true; data: MapsGroundingResult } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${API}/maps/grounding`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: data.error || "Failed to retrieve Google Maps data" };
+    }
+    return { ok: true, data };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Network connection error" };
+  }
+}
+
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
 

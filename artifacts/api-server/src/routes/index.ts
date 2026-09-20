@@ -4,6 +4,7 @@ import notifyRouter from "./notify";
 import packagesRouter from "./packages";
 import adminRouter from "./admin";
 import basemapsRouter from "./basemaps";
+import mapsGroundingRouter from "./mapsGrounding";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(adminRouter);
 router.use(packagesRouter);
 router.use(notifyRouter);
 router.use(basemapsRouter);
+router.use(mapsGroundingRouter);
 
 export default router;

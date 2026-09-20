@@ -11,12 +11,14 @@
   },
   "dependencies": {
     "@types/pg": "^8.18.0",
+    "@google/genai": "^2.23.0",
     "@workspace/api-zod": "*",
     "@workspace/db": "*",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "drizzle-orm": "^0.45.2",
     "express": "^5.0.1",
+    "nodemailer": "^6.9.16",
     "pg": "^8.20.0",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0"

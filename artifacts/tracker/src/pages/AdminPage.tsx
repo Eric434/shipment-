@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import {
   adminLogin, adminListPackages, adminCreatePackage,
-  adminDeletePackage, adminUpdatePackage, type Package as Pkg,
+  adminDeletePackage, adminUpdatePackage, checkSmtpStatus, sendTestSmtpEmail, type Package as Pkg,
 } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1356,7 +1356,38 @@ function SupportTab() {
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 
 function SettingsTab({ onLogout }: { onLogout: () => void }) {
+  const [smtpStatus, setSmtpStatus] = useState<{ configured: boolean; user: string | null; verified?: boolean; message?: string } | null>(null);
+  const [checkingSmtp, setCheckingSmtp] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null);
+
+  const loadSmtp = useCallback(async () => {
+    setCheckingSmtp(true);
+    const res = await checkSmtpStatus();
+    setSmtpStatus(res);
+    setCheckingSmtp(false);
+  }, []);
+
+  useEffect(() => {
+    loadSmtp();
+  }, [loadSmtp]);
+
+  const handleSendTest = async () => {
+    if (!testEmail || !testEmail.includes("@")) return;
+    setSendingTest(true);
+    setTestResult(null);
+    const res = await sendTestSmtpEmail(testEmail);
+    setSendingTest(false);
+    if (res.success) {
+      setTestResult({ success: true, msg: `Test email sent successfully! (ID: ${res.messageId})` });
+    } else {
+      setTestResult({ success: false, msg: res.error || "Failed to dispatch test email." });
+    }
+  };
+
   const FEATURES = [
+    { icon: Mail, label: "Gmail SMTP Relay", desc: "Automated shipment status and delivery completion emails via Gmail", status: smtpStatus?.configured ? "Active" : "Ready" },
     { icon: Shield, label: "Admin Authentication", desc: "Password-protected admin portal with session storage", status: "Active" },
     { icon: Lock, label: "SSL / HTTPS Encryption", desc: "All data transmitted over encrypted connections", status: "Active" },
     { icon: Wifi, label: "Real-time GPS Tracking", desc: "Live vehicle position simulation with bearing & speed", status: "Active" },
@@ -1400,6 +1431,95 @@ function SettingsTab({ onLogout }: { onLogout: () => void }) {
               </span>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Gmail SMTP Relay Management */}
+      <div className="bg-[#111] border border-white/6 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Mail className="w-4 h-4 text-red-400" />
+            <span className="text-sm font-medium text-white/90">Gmail SMTP Dispatch Relay</span>
+          </div>
+          <button
+            onClick={loadSmtp}
+            disabled={checkingSmtp}
+            className="flex items-center gap-1 text-[10px] text-white/30 hover:text-white/70 transition-colors"
+          >
+            <RefreshCw className={`w-3 h-3 ${checkingSmtp ? "animate-spin" : ""}`} />
+            <span>Re-check</span>
+          </button>
+        </div>
+
+        <div className="p-3.5 bg-white/2 rounded-xl border border-white/5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold text-white/80">SMTP Connection Status</div>
+              <div className="text-[10px] text-white/40 mt-0.5">
+                {smtpStatus?.configured
+                  ? `Configured via ${smtpStatus.user || "Gmail Account"}`
+                  : "Not configured in environment variables"}
+              </div>
+            </div>
+            <span className={`text-[10px] px-2.5 py-1 rounded-full font-semibold border ${
+              smtpStatus?.configured
+                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                : "bg-amber-500/15 border-amber-500/30 text-amber-300"
+            }`}>
+              {smtpStatus?.configured ? "CONNECTED" : "CREDENTIALS PENDING"}
+            </span>
+          </div>
+
+          {smtpStatus?.message && (
+            <div className="text-[10px] p-2.5 rounded-lg bg-black/40 border border-white/5 text-white/50 font-mono">
+              {smtpStatus.message}
+            </div>
+          )}
+
+          {/* Test Email Dispatch */}
+          <div className="pt-2 border-t border-white/6">
+            <div className="text-[10px] text-white/50 mb-2 uppercase tracking-wider font-semibold">
+              Dispatch Verification Test
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                value={testEmail}
+                onChange={(e) => {
+                  setTestEmail(e.target.value);
+                  setTestResult(null);
+                }}
+                placeholder="recipient@example.com"
+                disabled={sendingTest || !smtpStatus?.configured}
+                className="flex-1 bg-white/4 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-white/20 outline-none focus:border-red-500/50 disabled:opacity-40"
+              />
+              <button
+                onClick={handleSendTest}
+                disabled={!testEmail.includes("@") || sendingTest || !smtpStatus?.configured}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-30 text-white text-xs font-medium transition-all flex items-center gap-1.5"
+              >
+                {sendingTest ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                <span>Send Test</span>
+              </button>
+            </div>
+
+            {testResult && (
+              <div className={`mt-2 p-2 rounded-lg text-[10px] border flex items-center gap-1.5 ${
+                testResult.success
+                  ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-300"
+                  : "bg-red-500/10 border-red-500/25 text-red-300"
+              }`}>
+                {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                <span>{testResult.msg}</span>
+              </div>
+            )}
+
+            {!smtpStatus?.configured && (
+              <p className="text-[10px] text-white/35 mt-2 leading-relaxed">
+                To activate Gmail SMTP for live shipment alerts, add <code className="text-red-400 bg-white/5 px-1 py-0.5 rounded">GMAIL_USER</code> (your Gmail address) and <code className="text-red-400 bg-white/5 px-1 py-0.5 rounded">GMAIL_APP_PASSWORD</code> (a 16-character Google App Password from your Google Account security settings) to the environment variables.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

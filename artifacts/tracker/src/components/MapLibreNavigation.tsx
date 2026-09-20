@@ -674,3 +674,6 @@ export function MapLibreNavigationHUD({
     </>
   );
 }
+
+export { GoogleMapsNavigationHUD } from "./GoogleMapsNavigation";
+
