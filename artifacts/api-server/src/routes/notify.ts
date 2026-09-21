@@ -5,6 +5,8 @@ import {
   verifySmtpConnection,
   sendSubscriptionEmail,
   sendDeliveryCompleteEmail,
+  sendRegistrationEmail,
+  generateRegistrationEmailHtml,
   sendEmail,
 } from "../lib/mailer";
 
@@ -66,6 +68,77 @@ router.post("/notify/smtp-test", async (req, res) => {
 
   if (result.success) {
     res.json({ success: true, messageId: result.messageId });
+  } else {
+    res.status(500).json({ error: result.error });
+  }
+});
+
+router.get("/notify/registration-preview", (req, res) => {
+  const code = (req.query.code as string || "TSL-7824-SF").toUpperCase();
+  const html = generateRegistrationEmailHtml({
+    code,
+    recipientEmail: (req.query.to as string) || "recipient@example.com",
+    recipientName: (req.query.name as string) || "Alexander Vance",
+    role: (req.query.role as "receiver" | "sender") || "receiver",
+    origin: (req.query.origin as string) || "Fremont Gigafactory, CA",
+    destination: (req.query.destination as string) || "San Francisco Hub, CA",
+    eta: (req.query.eta as string) || "Today, 5:30 PM",
+    carrier: "Tesla Semi Precision Fleet",
+    weight: "3.6 kg (Precision Autonomous Package)",
+    delivery_method: "Priority Autonomous Express",
+    shipping_cost: 49.99,
+    customs_status: "Pre-Cleared",
+    customs_fee: 0,
+    sender_name: "Tesla Logistics Dispatch",
+    receiver_name: (req.query.name as string) || "Alexander Vance",
+  });
+
+  if (req.query.raw === "true") {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+    return;
+  }
+
+  res.json({ code, html });
+});
+
+router.post("/notify/test-registration-email", async (req, res) => {
+  const { to, code = "TSL-9281-EX", name = "Consignee Client", role = "receiver" } = req.body as {
+    to: string; code?: string; name?: string; role?: "receiver" | "sender";
+  };
+
+  if (!to || !to.includes("@")) {
+    res.status(400).json({ error: "A valid recipient email is required." });
+    return;
+  }
+
+  if (!isEmailConfigured()) {
+    res.status(400).json({
+      error: "Gmail SMTP credentials (GMAIL_USER and GMAIL_APP_PASSWORD) not configured in environment.",
+    });
+    return;
+  }
+
+  const result = await sendRegistrationEmail({
+    code: code.toUpperCase(),
+    recipientEmail: to.trim(),
+    recipientName: name,
+    role,
+    origin: "Tesla Factory Dispatch, Austin TX",
+    destination: "Client Residence, Los Angeles CA",
+    eta: "Tomorrow, 2:15 PM PST",
+    carrier: "Tesla Express Precision Fleet",
+    weight: "4.2 kg",
+    delivery_method: "Priority Direct Express",
+    shipping_cost: 59.00,
+    customs_status: "Verified",
+    customs_fee: 0,
+    sender_name: "Tesla Logistics Ops",
+    receiver_name: name,
+  });
+
+  if (result.success) {
+    res.json({ success: true, messageId: result.messageId, to: to.trim(), code });
   } else {
     res.status(500).json({ error: result.error });
   }

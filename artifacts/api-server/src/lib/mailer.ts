@@ -99,6 +99,282 @@ export async function sendEmail(options: SendMailOptions): Promise<{ success: bo
   }
 }
 
+export interface RegistrationEmailData {
+  code: string;
+  recipientEmail: string;
+  recipientName?: string;
+  role?: "receiver" | "sender" | "client";
+  origin: string;
+  destination: string;
+  eta?: string;
+  carrier?: string;
+  weight?: string;
+  delivery_method?: string;
+  shipping_cost?: number;
+  customs_status?: string;
+  customs_fee?: number;
+  sender_name?: string;
+  sender_email?: string;
+  sender_phone?: string;
+  sender_address?: string;
+  receiver_name?: string;
+  receiver_email?: string;
+  receiver_phone?: string;
+  receiver_address?: string;
+  trackingUrl?: string;
+}
+
+export function generateRegistrationEmailHtml(data: RegistrationEmailData): string {
+  const code = (data.code || "TSL-SHIPMENT").toUpperCase();
+  const recipient = data.recipientName?.trim() || (data.role === "sender" ? "Valued Consignor" : "Valued Consignee");
+  const isSender = data.role === "sender";
+  const roleHeadline = isSender
+    ? "Shipment Registration & Dispatch Confirmation"
+    : "Incoming Consignment & Tracking Registration";
+  const carrier = data.carrier || "Tesla Express Precision Logistics";
+  const eta = data.eta || "Pending Route Optimization";
+  const weight = data.weight || "Standard Freight";
+  const deliveryMethod = data.delivery_method || "Standard Dispatch";
+  const shippingCost = typeof data.shipping_cost === "number" ? `$${data.shipping_cost.toFixed(2)}` : "$0.00";
+  const customsStatus = data.customs_status || "Pending Verification";
+  const customsFee = typeof data.customs_fee === "number" ? `$${data.customs_fee.toFixed(2)}` : "$0.00";
+  const appBase = process.env.APP_URL || process.env.BASE_URL || "";
+  const trackingUrl = data.trackingUrl || (appBase ? `${appBase.replace(/\/$/, "")}/?code=${code}` : `https://ais-dev-pnkhmm5ek5l4rj32dvvs2f-642787899128.europe-west2.run.app/?code=${code}`);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Official Shipment Registration: ${code}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #08090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #ffffff;">
+  <!-- Container Table -->
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #08090b; padding: 32px 12px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card -->
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 620px; background-color: #12141a; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.12); overflow: hidden; box-shadow: 0 20px 48px rgba(0, 0, 0, 0.8);">
+          
+          <!-- Top Accent Bar -->
+          <tr>
+            <td height="4" style="background: linear-gradient(90deg, #e82127 0%, #ff4d4d 50%, #e82127 100%); line-height: 4px; font-size: 4px;">&nbsp;</td>
+          </tr>
+
+          <!-- Header -->
+          <tr>
+            <td style="padding: 32px 36px 20px 36px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #e82127; margin-bottom: 6px;">
+                      Tesla Precision Logistics &bull; Dispatch Service
+                    </div>
+                    <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em; line-height: 1.25;">
+                      ${roleHeadline}
+                    </h1>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Barcode & Code Strip -->
+          <tr>
+            <td style="padding: 0 36px 24px 36px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: rgba(255, 255, 255, 0.03); border: 1px dashed rgba(255, 255, 255, 0.18); border-radius: 12px; padding: 18px 24px;">
+                <tr>
+                  <td align="center">
+                    <div style="font-family: 'Courier New', Courier, monospace; font-size: 11px; letter-spacing: 0.28em; color: rgba(255, 255, 255, 0.45); margin-bottom: 6px;">
+                      ||| | |||| | ||| || |||| | || ||| |||| | ||
+                    </div>
+                    <div style="font-family: 'SF Mono', 'Courier New', Courier, monospace; font-size: 26px; font-weight: 700; color: #ffffff; letter-spacing: 0.12em; text-shadow: 0 0 20px rgba(232, 33, 39, 0.35);">
+                      ${code}
+                    </div>
+                    <div style="margin-top: 8px;">
+                      <span style="display: inline-block; padding: 4px 12px; border-radius: 999px; background-color: rgba(16, 185, 129, 0.12); color: #34d399; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; border: 1px solid rgba(16, 185, 129, 0.25);">
+                        &bull; Registered &amp; Active in Network
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Greeting Body -->
+          <tr>
+            <td style="padding: 0 36px 24px 36px; font-size: 14px; line-height: 1.6; color: rgba(255, 255, 255, 0.78);">
+              <p style="margin: 0 0 12px 0;">
+                Dear <strong style="color: #ffffff;">${recipient}</strong>,
+              </p>
+              <p style="margin: 0;">
+                ${isSender
+                  ? `Your shipment consignment has been successfully logged and registered within the Tesla automated dispatch network. Precision telemetry tracking, waypoint surveillance, and Google Maps live navigation are active for this parcel.`
+                  : `A new shipment consignment has been registered for delivery to you through the Tesla Precision Logistics network. Live telemetry, automated milestone notifications, and real-time carrier location tracking are now active.`}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Route Card -->
+          <tr>
+            <td style="padding: 0 36px 24px 36px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: rgba(255, 255, 255, 0.025); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 18px 20px;">
+                <tr>
+                  <td width="46%" valign="top">
+                    <div style="font-size: 10px; font-weight: 700; color: #ef4444; letter-spacing: 0.08em; text-transform: uppercase;">Origin Terminal</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px; line-height: 1.3;">${data.origin}</div>
+                    ${data.sender_name ? `<div style="font-size: 12px; color: rgba(255, 255, 255, 0.45); margin-top: 2px;">Sender: ${data.sender_name}</div>` : ""}
+                  </td>
+                  <td width="8%" align="center" valign="middle">
+                    <div style="font-size: 18px; color: #e82127; font-weight: bold;">&rarr;</div>
+                  </td>
+                  <td width="46%" valign="top" align="right">
+                    <div style="font-size: 10px; font-weight: 700; color: #10b981; letter-spacing: 0.08em; text-transform: uppercase;">Destination</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px; line-height: 1.3;">${data.destination}</div>
+                    ${data.receiver_name ? `<div style="font-size: 12px; color: rgba(255, 255, 255, 0.45); margin-top: 2px;">Recipient: ${data.receiver_name}</div>` : ""}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Specifications Table -->
+          <tr>
+            <td style="padding: 0 36px 28px 36px;">
+              <div style="font-size: 11px; font-weight: 700; color: rgba(255, 255, 255, 0.4); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px;">
+                Consignment Specification
+              </div>
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="border-collapse: collapse; background-color: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 10px; overflow: hidden;">
+                <tr>
+                  <td style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; color: rgba(255, 255, 255, 0.55);">Carrier Fleet</td>
+                  <td align="right" style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; font-weight: 600; color: #ffffff;">${carrier}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; color: rgba(255, 255, 255, 0.55);">Estimated Arrival</td>
+                  <td align="right" style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; font-weight: 600; color: #fca5a5;">${eta}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; color: rgba(255, 255, 255, 0.55);">Service Class</td>
+                  <td align="right" style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; font-weight: 600; color: #ffffff;">${deliveryMethod}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; color: rgba(255, 255, 255, 0.55);">Gross Weight</td>
+                  <td align="right" style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; font-weight: 600; color: #ffffff;">${weight}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; color: rgba(255, 255, 255, 0.55);">Customs Declaration</td>
+                  <td align="right" style="padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; font-weight: 600; color: #ffffff;">${customsStatus} (${customsFee})</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 16px; font-size: 12px; color: rgba(255, 255, 255, 0.55);">Shipping Fee</td>
+                  <td align="right" style="padding: 10px 16px; font-size: 12px; font-weight: 700; color: #ffffff;">${shippingCost}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Primary CTA Button -->
+          <tr>
+            <td align="center" style="padding: 0 36px 32px 36px;">
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
+                <tr>
+                  <td align="center" style="border-radius: 10px; background-color: #e82127; box-shadow: 0 6px 20px rgba(232, 33, 39, 0.45);">
+                    <a href="${trackingUrl}" target="_blank" style="display: inline-block; padding: 14px 32px; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 10px; letter-spacing: 0.02em;">
+                      TRACK SHIPMENT LIVE ON GOOGLE MAPS &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <div style="margin-top: 14px; font-size: 11px; color: rgba(255, 255, 255, 0.35);">
+                Direct telemetry link: <a href="${trackingUrl}" target="_blank" style="color: #f87171; text-decoration: none;">${trackingUrl}</a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Security & Dispatch Advisory -->
+          <tr>
+            <td style="padding: 24px 36px; background-color: rgba(0, 0, 0, 0.25); border-top: 1px solid rgba(255, 255, 255, 0.06);">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="font-size: 11px; line-height: 1.5; color: rgba(255, 255, 255, 0.35);">
+                    <strong style="color: rgba(255, 255, 255, 0.6);">Automated Dispatch Telemetry Notice:</strong> This message was generated automatically upon consignment booking and registration. You will receive milestone notices when this package arrives at regional distribution hubs and enters final-mile delivery.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 36px 28px 36px; border-top: 1px solid rgba(255, 255, 255, 0.04); text-align: center; font-size: 10px; color: rgba(255, 255, 255, 0.25); line-height: 1.6;">
+              Tesla Track Global Logistics &bull; Autonomous Fleet Routing &bull; Powered by Google Maps Platform<br>
+              Official Receipt &bull; Dispatch Stamp: ${new Date().toISOString()}
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+export function generateRegistrationEmailText(data: RegistrationEmailData): string {
+  const code = (data.code || "TSL-SHIPMENT").toUpperCase();
+  const recipient = data.recipientName?.trim() || (data.role === "sender" ? "Valued Consignor" : "Valued Consignee");
+  const appBase = process.env.APP_URL || process.env.BASE_URL || "";
+  const trackingUrl = data.trackingUrl || (appBase ? `${appBase.replace(/\/$/, "")}/?code=${code}` : `https://ais-dev-pnkhmm5ek5l4rj32dvvs2f-642787899128.europe-west2.run.app/?code=${code}`);
+
+  return `TESLA PRECISION LOGISTICS - OFFICIAL SHIPMENT REGISTRATION
+Tracking Identifier: ${code}
+
+Dear ${recipient},
+
+Your consignment has been successfully logged and registered within the Tesla automated dispatch network.
+
+SHIPMENT DETAILS:
+- Tracking Code: ${code}
+- Carrier: ${data.carrier || "Tesla Express Precision Logistics"}
+- Service Class: ${data.delivery_method || "Standard"}
+- Origin: ${data.origin}
+- Destination: ${data.destination}
+- Estimated Arrival: ${data.eta || "Pending Route Optimization"}
+- Weight: ${data.weight || "Standard Freight"}
+- Customs Status: ${data.customs_status || "Pending"}
+- Shipping Cost: $${Number(data.shipping_cost || 0).toFixed(2)}
+
+Track your delivery live on Google Maps:
+${trackingUrl}
+
+Sent via Tesla Track Autonomous Dispatch Network.
+`;
+}
+
+export async function sendRegistrationEmail(data: RegistrationEmailData): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const code = (data.code || "").toUpperCase();
+  const recipientEmail = data.recipientEmail?.trim();
+  if (!recipientEmail || !recipientEmail.includes("@")) {
+    return { success: false, error: "Valid recipient email address is required." };
+  }
+
+  const isSender = data.role === "sender";
+  const subject = isSender
+    ? `Consignment Registered: Shipment ${code} Scheduled for Dispatch`
+    : `Delivery Notice: Shipment ${code} Registered for Transit`;
+
+  const html = generateRegistrationEmailHtml(data);
+  const text = generateRegistrationEmailText(data);
+
+  return sendEmail({
+    to: recipientEmail,
+    subject,
+    text,
+    html,
+  });
+}
+
 // ─── Email Templates ─────────────────────────────────────────────────────────
 
 export async function sendSubscriptionEmail(

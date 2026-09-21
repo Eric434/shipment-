@@ -160,6 +160,65 @@ export async function sendTestSmtpEmail(to: string): Promise<{ success: boolean;
   }
 }
 
+export async function sendTestRegistrationEmail(payload: {
+  to: string;
+  code?: string;
+  name?: string;
+  role?: "receiver" | "sender";
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API}/notify/test-registration-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) return { success: false, error: data.error || "Failed to send registration email" };
+    return { success: true, messageId: data.messageId };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Network error" };
+  }
+}
+
+export async function fetchPackageRegistrationPreview(
+  code: string,
+  role: "receiver" | "sender" = "receiver"
+): Promise<{ ok: boolean; html?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API}/packages/${encodeURIComponent(code)}/registration-mail-preview?role=${role}`);
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || "Failed to load preview" };
+    return { ok: true, html: data.html };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Network error" };
+  }
+}
+
+export async function sendPackageRegistrationEmail(
+  token: string,
+  code: string,
+  options?: { targetEmail?: string; role?: "receiver" | "sender" }
+): Promise<{ success: boolean; messageId?: string; recipientEmail?: string; error?: string; smtpConfigured?: boolean }> {
+  try {
+    const res = await fetch(`${API}/admin/packages/${encodeURIComponent(code)}/send-registration-mail`, {
+      method: "POST",
+      headers: adminHeaders(token),
+      body: JSON.stringify(options || {}),
+    });
+    const data = await res.json();
+    if (!res.ok) return { success: false, error: data.error || "Failed to send registration email" };
+    return {
+      success: data.success,
+      messageId: data.messageId,
+      recipientEmail: data.recipientEmail,
+      smtpConfigured: data.smtpConfigured,
+      error: data.error,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Network error" };
+  }
+}
+
 // ─── Google Maps Grounding & Place Intelligence ──────────────────────────────
 
 export interface MapsGroundingPlace {
@@ -234,8 +293,14 @@ export async function adminListPackages(token: string): Promise<Package[]> {
 
 export async function adminCreatePackage(
   token: string,
-  data: Omit<Package, "created_at">
-): Promise<{ success: boolean; error?: string }> {
+  data: Omit<Package, "created_at"> & { notify_parties?: boolean }
+): Promise<{
+  success: boolean;
+  error?: string;
+  code?: string;
+  registrationEmailsSent?: { receiver?: boolean; sender?: boolean };
+  smtpConfigured?: boolean;
+}> {
   try {
     const res = await fetch(`${API}/admin/packages`, {
       method: "POST",
@@ -244,7 +309,12 @@ export async function adminCreatePackage(
     });
     const json = await res.json();
     if (!res.ok) return { success: false, error: json.error ?? "Failed" };
-    return { success: true };
+    return {
+      success: true,
+      code: json.code,
+      registrationEmailsSent: json.registrationEmailsSent,
+      smtpConfigured: json.smtpConfigured,
+    };
   } catch {
     return { success: false, error: "Network error" };
   }
