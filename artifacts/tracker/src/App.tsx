@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import "@/lib/firebase";
 import LandingPage from "@/pages/LandingPage";
 import TrackingResult from "@/pages/TrackingResult";
 import AdminPage from "@/pages/AdminPage";

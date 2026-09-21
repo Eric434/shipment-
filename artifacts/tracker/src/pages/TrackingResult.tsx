@@ -1,17 +1,29 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Package, CheckCircle2, Circle, MapPin, Clock,
   Bell, BellOff, Play, Pause, RotateCcw, Navigation,
   Loader2, AlertCircle, Wifi, ChevronRight, Gauge,
   X, List, FileText, Download, Compass, Lock, CheckSquare,
   Calendar, CalendarDays, Crosshair, Map as MapIcon,
-  Sun, Moon, Check, FastForward, Plus, Minus, Layers, Maximize2,
-  Truck, Share2, Phone, Info, Box, Route, Copy, CheckCheck,
+  Sun, Moon, Check, FastForward, Plus, Minus, Layers, Maximize2, Menu, Sparkles, Mail,
+  Printer, QrCode,
 } from "lucide-react";
-import { fetchPackage, subscribeToAlerts, notifyDelivered, type Package as Pkg, type FetchPackageResult } from "@/lib/api";
-import { MapLibreNavigationHUD } from "@/components/MapLibreNavigation";
+import { fetchPackage, subscribeToAlerts, notifyDelivered, checkSmtpStatus, type Package as Pkg, type FetchPackageResult } from "@/lib/api";
+import {
+  saveNotificationEmailToFirestore,
+  getNotificationEmailFromFirestore,
+} from "@/lib/firebase";
+import { GoogleMapsNavigationHUD } from "@/components/GoogleMapsNavigation";
 import { TeslaVehicleDashboard } from "@/components/TeslaVehicleDashboard";
-import { loadGoogleMaps, TESLA_DARK_MAP_STYLES } from "@/lib/googleMaps";
+import { GoogleMapsGroundingPanel } from "@/components/GoogleMapsGroundingPanel";
+import { PrintShippingLabelModal } from "@/components/PrintShippingLabelModal";
+import { TrackingEmailTemplatesTab } from "@/components/TrackingEmailTemplatesTab";
+import {
+  loadGoogleMaps,
+  TESLA_DARK_MAP_STYLES,
+  fetchGoogleMapsDrivingRoute,
+  type GoogleDirectionsResult,
+} from "@/lib/googleMaps";
 
 declare const google: any;
 
@@ -197,27 +209,74 @@ function calculateEstimatedDelivery(
 }
 
 function vehicleMarkerHtml(moving: boolean, bearing: number): string {
-  const glow = moving
-    ? `<div class="vehicle-pulse-glow" style="position:absolute;inset:-8px;border-radius:50%;background:radial-gradient(circle, rgba(220,38,38,0.4) 0%, rgba(220,38,38,0) 70%);pointer-events:none;"></div>
-       <div style="position:absolute;inset:-2px;border-radius:50%;background:rgba(220,38,38,0.15);pointer-events:none;"></div>`
+  const headlightBeam = moving
+    ? `<div class="headlight-beam" style="position:absolute;top:-28px;left:-6px;width:40px;height:36px;background:radial-gradient(ellipse at 50% 100%, rgba(254,240,138,0.45) 0%, rgba(254,240,138,0.15) 50%, rgba(254,240,138,0) 100%);clip-path:polygon(25% 100%, 75% 100%, 100% 0%, 0% 0%);pointer-events:none;z-index:0;animation:headlight-flicker 2s infinite ease-in-out;"></div>`
     : "";
-  const headlightOpacity = moving ? "1" : "0.35";
-  const bodyColor = moving ? "#dc2626" : "#b91c1c";
-  return `<div class="vehicle-icon-wrapper" style="position:relative;width:28px;height:44px;transform:rotate(${bearing}deg);transform-origin:14px 22px;transition:transform 0.45s cubic-bezier(0.25,1,0.5,1);will-change:transform;">
-    ${glow}
-    <svg viewBox="0 0 28 44" width="28" height="44" xmlns="http://www.w3.org/2000/svg" style="position:relative;z-index:1;filter:drop-shadow(0 3px 10px rgba(220,38,38,0.55));">
-      <rect x="4" y="8" width="20" height="28" rx="5" fill="${bodyColor}"/>
-      <rect x="7" y="14" width="14" height="13" rx="3" fill="#991b1b"/>
-      <rect x="8" y="11" width="12" height="4" rx="1.5" fill="rgba(147,210,255,0.55)"/>
-      <rect x="8" y="29" width="12" height="4" rx="1.5" fill="rgba(147,210,255,0.35)"/>
-      <rect x="1" y="10" width="5" height="8" rx="2" fill="#111"/><rect x="2.5" y="11.5" width="2" height="5" rx="1" fill="#333"/>
-      <rect x="22" y="10" width="5" height="8" rx="2" fill="#111"/><rect x="23.5" y="11.5" width="2" height="5" rx="1" fill="#333"/>
-      <rect x="1" y="26" width="5" height="8" rx="2" fill="#111"/><rect x="2.5" y="27.5" width="2" height="5" rx="1" fill="#333"/>
-      <rect x="22" y="26" width="5" height="8" rx="2" fill="#111"/><rect x="23.5" y="27.5" width="2" height="5" rx="1" fill="#333"/>
-      <rect x="7" y="8" width="5" height="2.5" rx="1" fill="#fde68a" opacity="${headlightOpacity}"/>
-      <rect x="16" y="8" width="5" height="2.5" rx="1" fill="#fde68a" opacity="${headlightOpacity}"/>
-      <rect x="7" y="33" width="5" height="2.5" rx="1" fill="#ef4444" opacity="0.85"/>
-      <rect x="16" y="33" width="5" height="2.5" rx="1" fill="#ef4444" opacity="0.85"/>
+
+  const radarSweep = moving
+    ? `<div class="radar-scan" style="position:absolute;inset:-16px;border-radius:50%;border:1px solid rgba(239,68,68,0.4);pointer-events:none;animation:radar-wave 1.8s cubic-bezier(0.1,0.7,0.1,1) infinite;"></div>
+       <div class="vehicle-pulse-glow" style="position:absolute;inset:-10px;border-radius:50%;background:radial-gradient(circle, rgba(220,38,38,0.45) 0%, rgba(220,38,38,0) 72%);pointer-events:none;"></div>`
+    : `<div style="position:absolute;inset:-4px;border-radius:50%;background:rgba(220,38,38,0.18);pointer-events:none;"></div>`;
+
+  const headlightColor = moving ? "#fef08a" : "#fde047";
+  const bodyColor = moving ? "#e11d48" : "#9f1239";
+  const windshieldColor = moving ? "#38bdf8" : "#0284c7";
+
+  return `<div class="vehicle-icon-wrapper" style="position:relative;width:32px;height:48px;transform:rotate(${bearing}deg);transform-origin:16px 24px;transition:transform 0.25s linear;will-change:transform;">
+    ${radarSweep}
+    ${headlightBeam}
+    <svg viewBox="0 0 32 48" width="32" height="48" xmlns="http://www.w3.org/2000/svg" style="position:relative;z-index:2;filter:drop-shadow(0 4px 12px rgba(225,29,72,0.6));">
+      <defs>
+        <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#fb7185" />
+          <stop offset="45%" stop-color="${bodyColor}" />
+          <stop offset="100%" stop-color="#881337" />
+        </linearGradient>
+        <linearGradient id="glassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="${windshieldColor}" stop-opacity="0.95" />
+          <stop offset="100%" stop-color="#0369a1" stop-opacity="0.7" />
+        </linearGradient>
+        <filter id="laserGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+      </defs>
+
+      <!-- Side Mirror Left & Right -->
+      <path d="M 2 15 Q 1 13 4 13 L 5 15 Z" fill="#475569" />
+      <path d="M 30 15 Q 31 13 28 13 L 27 15 Z" fill="#475569" />
+
+      <!-- Aerodynamic Wheels (4 corner tires) -->
+      <rect x="1.5" y="8" width="4.5" height="9" rx="2" fill="#09090b" stroke="#27272a" stroke-width="0.8" />
+      <rect x="26" y="8" width="4.5" height="9" rx="2" fill="#09090b" stroke="#27272a" stroke-width="0.8" />
+      <rect x="1.5" y="31" width="4.5" height="9" rx="2" fill="#09090b" stroke="#27272a" stroke-width="0.8" />
+      <rect x="26" y="31" width="4.5" height="9" rx="2" fill="#09090b" stroke="#27272a" stroke-width="0.8" />
+
+      <!-- Main Vehicle Chassis / Body Shell -->
+      <path d="M 16 3 C 8 3 5 8 5 14 L 5 36 C 5 42 9 45 16 45 C 23 45 27 42 27 36 L 27 14 C 27 8 24 3 16 3 Z" fill="url(#bodyGrad)" stroke="#fda4af" stroke-width="0.75" />
+
+      <!-- Contoured Roof Canopy -->
+      <path d="M 16 11 C 9.5 11 8 15 8 21 L 8 32 C 8 37 10 39 16 39 C 22 39 24 37 24 32 L 24 21 C 24 15 22.5 11 16 11 Z" fill="#0f172a" />
+
+      <!-- Front Windshield Curved Glass -->
+      <path d="M 9.5 14 Q 16 12 22.5 14 L 21.5 19 Q 16 18 10.5 19 Z" fill="url(#glassGrad)" />
+
+      <!-- Panoramic Glass Roof -->
+      <rect x="11" y="21" width="10" height="7" rx="1.5" fill="#1e293b" opacity="0.9" />
+
+      <!-- Rear Window Glass -->
+      <path d="M 10.5 30 Q 16 29 21.5 30 L 22.5 34 Q 16 35 9.5 34 Z" fill="url(#glassGrad)" opacity="0.8" />
+
+      <!-- Front LED Matrix Projectors / Headlights -->
+      <ellipse cx="8.5" cy="5" rx="2.5" ry="1.2" fill="${headlightColor}" filter="url(#laserGlow)" />
+      <ellipse cx="23.5" cy="5" rx="2.5" ry="1.2" fill="${headlightColor}" filter="url(#laserGlow)" />
+
+      <!-- Signature Red Tail Light Lightbar -->
+      <path d="M 8 43 Q 16 44 24 43" stroke="#ff2442" stroke-width="2" stroke-linecap="round" filter="url(#laserGlow)" />
+
+      <!-- GPS Autopilot Navigation Pulse Dot -->
+      <circle cx="16" cy="24" r="2.2" fill="#38bdf8" />
+      <circle cx="16" cy="24" r="3.8" stroke="#38bdf8" stroke-width="0.75" opacity="0.6" />
     </svg>
   </div>`;
 }
@@ -274,7 +333,7 @@ function computeStepMs(eta: string, startProgress: number): number {
   return Math.max(500, Math.min(30_000, stepMs));
 }
 
-type DrawerTab = "timeline" | "alerts" | "docs";
+type DrawerTab = "timeline" | "places" | "controls" | "map" | "alerts" | "templates" | "docs";
 interface Props { code: string; onBack: () => void; }
 
 // ─── Loading / Error screens ──────────────────────────────────────────────────
@@ -371,6 +430,7 @@ function TimelinePanel({
   currentCoord,
   deliveryEstimate,
   getProgressGradient,
+  onOpenPlaces,
 }: {
   pkg: Pkg;
   code: string;
@@ -381,6 +441,7 @@ function TimelinePanel({
   currentCoord?: [number, number];
   deliveryEstimate: DeliveryEstimate;
   getProgressGradient: () => string;
+  onOpenPlaces?: () => void;
 }) {
   const currentMilestone = getMilestoneIndex(pkg.status);
 
@@ -434,6 +495,25 @@ function TimelinePanel({
               style={{ width: `${progress}%`, transition: "width 1.6s cubic-bezier(0.4,0,0.2,1)" }} />
           </div>
         </div>
+
+        {/* Quick Google Maps Grounding Insight action */}
+        {onOpenPlaces && (
+          <button
+            onClick={onOpenPlaces}
+            className="w-full mt-3.5 py-2 px-3 rounded-xl bg-red-600/15 hover:bg-red-600/25 border border-red-500/30 text-red-300 hover:text-white flex items-center justify-between text-xs transition-all group shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <div className="p-1 rounded-lg bg-red-500/20 text-red-400 group-hover:scale-105 transition-transform">
+                <MapPin className="w-3 h-3" />
+              </div>
+              <span className="font-semibold text-[11px]">Google Maps Data & Places</span>
+            </div>
+            <span className="text-[10px] text-red-400/80 group-hover:text-red-300 flex items-center gap-0.5">
+              <span>Explore</span>
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Live telemetry row */}
@@ -555,68 +635,184 @@ function TimelinePanel({
 
 // ─── Notifications panel ──────────────────────────────────────────────────────
 
-function NotificationsPanel({ pkg, trackingCode, simSpeed, secsAgo, playing }: {
-  pkg: Pkg; trackingCode: string; simSpeed: number; secsAgo: number; playing: boolean;
+function NotificationsPanel({
+  pkg,
+  trackingCode,
+  simSpeed,
+  secsAgo,
+  playing,
+  externalEmail,
+  isExternalSubscribed,
+  onNotifyUpdated,
+}: {
+  pkg: Pkg;
+  trackingCode: string;
+  simSpeed: number;
+  secsAgo: number;
+  playing: boolean;
+  externalEmail?: string;
+  isExternalSubscribed?: boolean;
+  onNotifyUpdated?: (email: string, subscribed: boolean, isUserAction?: boolean) => void;
 }) {
-  const [email, setEmail] = useState("");
-  const [subscribed, setSubscribed] = useState(false);
+  const [email, setEmail] = useState(externalEmail || pkg.receiver_email || "");
+  const [notifyChecked, setNotifyChecked] = useState(Boolean(isExternalSubscribed));
+  const [subscribed, setSubscribed] = useState(Boolean(isExternalSubscribed));
   const [showInput, setShowInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [smtpStatus, setSmtpStatus] = useState<{ configured: boolean; user: string | null } | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
+  const [firestoreSaved, setFirestoreSaved] = useState(false);
+
+  useEffect(() => {
+    checkSmtpStatus().then((status) => {
+      setSmtpStatus(status);
+    });
+
+    // Check if Firestore document already has notification email saved
+    getNotificationEmailFromFirestore(trackingCode).then((saved) => {
+      if (saved) {
+        setEmail(saved);
+        setNotifyChecked(true);
+        setSubscribed(true);
+        setFirestoreSaved(true);
+        onNotifyUpdated?.(saved, true, false);
+      } else if (externalEmail) {
+        setEmail(externalEmail);
+        setNotifyChecked(Boolean(isExternalSubscribed));
+        setSubscribed(Boolean(isExternalSubscribed));
+      }
+    });
+  }, [trackingCode, externalEmail, isExternalSubscribed]);
 
   const handleSubscribe = async () => {
     if (!email.includes("@")) return;
-    setLoading(true); setApiError(null);
-    const result = await subscribeToAlerts({
-      email, trackingCode, status: pkg.status, eta: pkg.eta, from: pkg.origin, to: pkg.destination,
-    });
-    setLoading(false);
-    if (result.success) setSubscribed(true);
-    else setApiError(result.error ?? "Something went wrong");
+    setLoading(true);
+    setApiError(null);
+
+    try {
+      // 1. Save user's email to the Firestore document for future status updates
+      await saveNotificationEmailToFirestore(trackingCode, email, pkg);
+      setFirestoreSaved(true);
+
+      // 2. Trigger notification service / SMTP if configured
+      const result = await subscribeToAlerts({
+        email,
+        trackingCode,
+        status: pkg.status,
+        eta: pkg.eta,
+        from: pkg.origin,
+        to: pkg.destination,
+      });
+
+      setSubscribed(true);
+      setNotifyChecked(true);
+      setEmailSent(Boolean(result.emailSent));
+      onNotifyUpdated?.(email, true, true);
+    } catch (err: any) {
+      console.error("Failed to save email notification to Firestore:", err);
+      setApiError(err?.message || "Failed to save email to Firestore.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCheckboxToggle = (checked: boolean) => {
+    setNotifyChecked(checked);
+    if (!checked) {
+      setSubscribed(false);
+      setFirestoreSaved(false);
+      onNotifyUpdated?.("", false, true);
+    } else {
+      setShowInput(true);
+      if (email.includes("@")) {
+        handleSubscribe();
+      }
+    }
   };
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="p-4 border-b border-white/6 flex-shrink-0">
-        <div className="text-[9px] text-white/25 uppercase tracking-widest mb-4">Email Notifications</div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[9px] text-white/25 uppercase tracking-widest">Email Notifications</div>
+          {smtpStatus && (
+            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-medium border ${
+              smtpStatus.configured
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                : "bg-white/5 border-white/10 text-white/40"
+            }`}>
+              <Mail className="w-2.5 h-2.5" />
+              <span>{smtpStatus.configured ? "Gmail SMTP Active" : "Gmail SMTP Standby"}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 'Notify me via email' Checkbox Card */}
+        <div className="mb-4">
+          <label className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/10 hover:border-white/20 transition-all cursor-pointer select-none">
+            <input
+              type="checkbox"
+              id="notify-email-checkbox"
+              checked={notifyChecked}
+              onChange={(e) => handleCheckboxToggle(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 text-red-600 focus:ring-red-500/40 focus:ring-offset-0 cursor-pointer accent-red-600 flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-white/90">Notify me via email</span>
+                <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-red-600/20 text-red-400 border border-red-500/30">
+                  Firestore
+                </span>
+              </div>
+              <p className="text-[10px] text-white/40 leading-relaxed mt-0.5">
+                Save your email to the package Firestore document for future status updates and alerts.
+              </p>
+            </div>
+          </label>
+        </div>
+
         {!subscribed ? (
           <>
-            <p className="text-[10px] text-white/30 leading-relaxed mb-4">
-              Get notified the moment your package status changes.
-            </p>
-            {!showInput ? (
-              <button onClick={() => setShowInput(true)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white text-xs font-medium transition-all">
-                <Bell className="w-3.5 h-3.5" /> Enable Alerts
-              </button>
-            ) : (
-              <div className="space-y-2">
-                <input type="email" value={email}
+            {notifyChecked && (
+              <div className="space-y-2 mt-2 animate-fade-in">
+                <input
+                  type="email"
+                  value={email}
                   onChange={(e) => { setEmail(e.target.value); setApiError(null); }}
                   onKeyDown={(e) => e.key === "Enter" && handleSubscribe()}
-                  placeholder="your@email.com" disabled={loading}
-                  className="w-full bg-white/4 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-white/20 outline-none focus:border-red-600/40 disabled:opacity-50" />
+                  placeholder="Enter email address..."
+                  disabled={loading}
+                  className="w-full bg-white/4 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-white/20 outline-none focus:border-red-600/40 disabled:opacity-50"
+                />
                 {apiError && (
                   <div className="flex items-start gap-1.5 text-[10px] text-red-400">
                     <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" /><span>{apiError}</span>
                   </div>
                 )}
-                <button onClick={handleSubscribe} disabled={!email.includes("@") || loading}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-30 text-white text-xs font-medium transition-all">
-                  {loading ? <><Loader2 className="w-3 h-3 animate-spin" />Sending…</> : "Subscribe"}
+                <button
+                  onClick={handleSubscribe}
+                  disabled={!email.includes("@") || loading}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-30 text-white text-xs font-medium transition-all shadow-md shadow-red-950/40"
+                >
+                  {loading ? <><Loader2 className="w-3 h-3 animate-spin" />Saving to Firestore…</> : "Save Email to Firestore"}
                 </button>
               </div>
             )}
           </>
         ) : (
-          <div className="text-center py-1">
-            <CheckCircle2 className="w-6 h-6 text-green-400 mx-auto mb-2" />
-            <p className="text-[10px] text-green-400 font-medium">Alerts enabled!</p>
-            <p className="text-[9px] text-white/35 mt-1 break-all">{email}</p>
-            <p className="text-[9px] text-white/20 mt-1">Confirmation email sent.</p>
-            <button onClick={() => { setSubscribed(false); setShowInput(false); setEmail(""); setApiError(null); }}
-              className="mt-3 flex items-center gap-1 text-[9px] text-white/18 hover:text-white/40 transition-colors mx-auto">
-              <BellOff className="w-2.5 h-2.5" /> Unsubscribe
+          <div className="text-center py-3 bg-white/[0.02] border border-white/8 rounded-xl p-3">
+            <CheckCircle2 className="w-5 h-5 text-green-400 mx-auto mb-1.5" />
+            <p className="text-[11px] text-green-400 font-semibold">Saved to Firestore Document!</p>
+            <p className="text-[10px] text-white/70 mt-1 break-all font-mono">{email}</p>
+            <p className="text-[9px] text-white/40 mt-1.5 leading-relaxed">
+              Future status updates and arrival notifications will be dispatched to this address.
+            </p>
+            <button
+              onClick={() => { setSubscribed(false); setNotifyChecked(false); setFirestoreSaved(false); onNotifyUpdated?.("", false); }}
+              className="mt-3 flex items-center gap-1 text-[9px] text-white/30 hover:text-white/60 transition-colors mx-auto"
+            >
+              <BellOff className="w-2.5 h-2.5" /> Edit or unsubscribe
             </button>
           </div>
         )}
@@ -1095,17 +1291,97 @@ const DOCUMENTS = [
   { name: "Insurance Certificate",desc: "Cargo insurance documentation",                status: "available" as const, pages: 2, ref: "INS"  },
 ];
 
-function DocumentsPanel({ code, pkg }: { code: string; pkg: Pkg }) {
+function DocumentsPanel({
+  code,
+  pkg,
+  onOpenPrintLabel,
+  onOpenTemplates,
+}: {
+  code: string;
+  pkg: Pkg;
+  onOpenPrintLabel?: () => void;
+  onOpenTemplates?: () => void;
+}) {
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <div className="p-5 border-b border-white/6 flex-shrink-0">
-        <div className="text-[9px] text-white/25 uppercase tracking-widest mb-1">Document Vault</div>
-        <p className="text-[10px] text-white/30 leading-relaxed">
-          Secure shipment documentation for tracking code <span className="font-mono text-white/45">{code}</span>.
+      <div className="p-4 border-b border-white/6 flex-shrink-0">
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-[9px] text-white/25 uppercase tracking-widest font-semibold">Document Vault &amp; Labels</div>
+          <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-white/40 border border-white/10">
+            TSL-{code.slice(-4).toUpperCase()}
+          </span>
+        </div>
+        <p className="text-[10px] text-white/35 leading-relaxed">
+          Official carrier manifests, shipping waybills, and email templates for <span className="font-mono text-white/55">{code}</span>.
         </p>
       </div>
 
-      <div className="flex-1 p-4 space-y-2 overflow-y-auto">
+      <div className="flex-1 p-3.5 space-y-2.5 overflow-y-auto">
+        {/* Featured: Official Shipping Label & Carrier Waybill */}
+        <div className="rounded-xl border border-red-500/30 bg-gradient-to-br from-red-600/10 via-red-950/10 to-transparent p-3.5 shadow-lg shadow-black/40 relative overflow-hidden">
+          <div className="flex items-start justify-between gap-2.5">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-red-600/20 border border-red-500/40 flex items-center justify-center flex-shrink-0 text-red-400 mt-0.5">
+                <Printer className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-white">Shipping Waybill Label</span>
+                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 uppercase">
+                    Ready
+                  </span>
+                </div>
+                <div className="text-[9px] text-white/40 mt-0.5 leading-snug">
+                  4" × 6" standard thermal label with scan barcode, recipient address, and routing code.
+                </div>
+                <div className="text-[8px] text-white/20 mt-1 font-mono">
+                  REF: LBL-{code.slice(-4)} · 1 PKG · {pkg.weight || "2.5 KG"}
+                </div>
+              </div>
+            </div>
+
+            <button
+              id="docs-print-label-btn"
+              onClick={onOpenPrintLabel}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[11px] font-semibold transition-all shadow-md shadow-red-900/30 flex-shrink-0 cursor-pointer"
+            >
+              <Printer className="w-3 h-3" />
+              <span>Print Label</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Featured: Automated Tracking Email Templates */}
+        <div className="rounded-xl border border-blue-500/25 bg-blue-600/[0.04] p-3 transition-all hover:border-blue-500/40">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-blue-600/15 border border-blue-500/30 flex items-center justify-center flex-shrink-0 text-blue-400">
+                <Mail className="w-3.5 h-3.5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-white/90">Tracking Mail Templates</div>
+                <div className="text-[9px] text-white/40 truncate">
+                  Dispatched, In Transit, Out for Delivery, and Label templates
+                </div>
+              </div>
+            </div>
+
+            {onOpenTemplates && (
+              <button
+                onClick={onOpenTemplates}
+                className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 font-medium px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 transition-all flex-shrink-0"
+              >
+                <span>View Templates</span>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="text-[8px] text-white/20 uppercase tracking-wider px-1 pt-1 font-semibold">
+          Commercial &amp; Transport Documents
+        </div>
+
         {DOCUMENTS.map((doc) => (
           <div key={doc.ref} className={`rounded-xl border p-3.5 transition-all ${
             doc.status === "available"
@@ -1169,60 +1445,6 @@ function DocumentsPanel({ code, pkg }: { code: string; pkg: Pkg }) {
   );
 }
 
-// ─── Mobile customer tracking layout ──────────────────────────────────────────
-
-function MobileTrackingLayout({
-  pkg, code, onBack, mapRef, mapLoading, mapError, progress, isDelivered, playing,
-  simSpeed, deliveryEstimate, currentCoord, fullPath, posIdx, handleRecenterCamera,
-  handleToggleOverview, setDrawerOpen, setDrawerTab,
-}: {
-  pkg: Pkg; code: string; onBack: () => void; mapRef: React.RefObject<HTMLDivElement | null>;
-  mapLoading: boolean; mapError: string | null; progress: number; isDelivered: boolean;
-  playing: boolean; simSpeed: number; deliveryEstimate: DeliveryEstimate;
-  currentCoord?: [number, number]; fullPath: [number, number][]; posIdx: number;
-  handleRecenterCamera: () => void; handleToggleOverview: () => void;
-  setDrawerOpen: (open: boolean) => void; setDrawerTab: (tab: DrawerTab) => void;
-}) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [shared, setShared] = useState(false);
-  const activeIndex = isDelivered ? 4 : pkg.status === "Out for Delivery" ? 3 : pkg.status === "In Transit" ? 2 : pkg.status === "Picked Up" ? 1 : 0;
-  const steps = ["Order Confirmed", "Picked Up", "In Transit", "Out for Delivery", "Delivered"];
-  const shareTracking = async () => {
-    const shareData = { title: `Shipment ${code}`, text: `Track shipment ${code}`, url: window.location.href };
-    if (navigator.share) await navigator.share(shareData).catch(() => undefined);
-    else await navigator.clipboard?.writeText(window.location.href);
-    setShared(true); window.setTimeout(() => setShared(false), 1800);
-  };
-
-  return (
-    <main className="min-h-[100dvh] bg-[#f5f8fb] text-slate-950 pb-7">
-      <header className="flex items-center justify-between px-5 pt-5 pb-4 bg-white">
-        <button onClick={onBack} aria-label="Go back" className="grid size-10 place-items-center rounded-full bg-slate-100 text-slate-700"><ArrowLeft className="size-5" /></button>
-        <div className="text-center"><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Track Shipment</p><p className="mt-1 font-mono text-sm font-bold tracking-wide text-slate-900">{code}</p></div>
-        <button onClick={shareTracking} aria-label="Share tracking" className="grid size-10 place-items-center rounded-full bg-blue-50 text-blue-600"><Share2 className="size-5" /></button>
-      </header>
-
-      <section className="px-4 pt-4"><div className="relative h-[245px] overflow-hidden rounded-[26px] bg-slate-200 shadow-[0_12px_30px_rgba(15,23,42,0.12)]">
-        <div ref={mapRef} className="absolute inset-0" />
-        {mapLoading && <div className="absolute inset-0 grid place-items-center bg-slate-100/90"><Loader2 className="size-7 animate-spin text-blue-600" /></div>}
-        {mapError && <div className="absolute inset-3 flex items-center justify-center rounded-2xl bg-white/90 p-4 text-center text-xs text-slate-600">{mapError}</div>}
-        <div className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-semibold text-slate-700 shadow-sm backdrop-blur">Live location</div>
-        <div className="absolute bottom-3 right-3 flex gap-2"><button onClick={handleRecenterCamera} className="grid size-9 place-items-center rounded-full bg-white text-blue-600 shadow-md" aria-label="Center on vehicle"><Crosshair className="size-4" /></button><button onClick={handleToggleOverview} className="grid size-9 place-items-center rounded-full bg-white text-slate-600 shadow-md" aria-label="Show route overview"><Maximize2 className="size-4" /></button></div>
-      </div></section>
-
-      <section className="px-4 pt-4"><div className="rounded-[22px] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.07)]"><div className="flex items-start justify-between"><div><div className="flex items-center gap-2"><span className="size-2.5 animate-pulse rounded-full bg-emerald-500" /><span className="text-sm font-semibold text-emerald-700">{isDelivered ? "Delivered" : "In Transit"}</span></div><p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{isDelivered ? "Delivered" : "Arriving Today"}</p><p className="mt-1 text-sm text-slate-500">Estimated {deliveryEstimate.formattedTime} · {deliveryEstimate.remainingDistanceKm} km away</p></div><div className="grid size-12 place-items-center rounded-2xl bg-blue-50 text-blue-600"><Truck className="size-6" /></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-emerald-500 transition-all" style={{ width: `${Math.max(progress, 8)}%` }} /></div><div className="mt-2 flex justify-between text-[10px] font-medium text-slate-400"><span>{progress}% complete</span><span>{playing ? `Moving · ${simSpeed} km/h` : "Live tracking"}</span></div></div></section>
-
-      <section className="px-4 pt-4"><div className="rounded-[22px] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,42,0.07)]"><div className="mb-5 flex items-center justify-between"><h2 className="text-base font-bold text-slate-900">Shipment progress</h2><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">Live</span></div><div className="flex flex-col gap-4">{steps.map((step, index) => { const done = index <= activeIndex; return <div key={step} className="flex items-center gap-3"><div className={`relative grid size-6 place-items-center rounded-full border-2 ${done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-200 bg-white text-slate-300"}`}>{done ? <Check className="size-3.5" /> : <Circle className="size-2.5" />}{index < steps.length - 1 && <span className={`absolute left-1/2 top-6 h-4 w-px -translate-x-1/2 ${index < activeIndex ? "bg-emerald-300" : "bg-slate-200"}`} />}</div><span className={`text-sm ${done ? "font-semibold text-slate-800" : "text-slate-400"}`}>{step}</span></div> })}</div></div></section>
-
-      <section className="px-4 pt-4"><div className="grid grid-cols-2 gap-3"><div className="rounded-[18px] bg-white p-4 shadow-sm"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">From</p><p className="mt-2 truncate text-sm font-semibold text-slate-800">{pkg.origin}</p><p className="mt-1 text-xs text-slate-400">Origin hub</p></div><div className="rounded-[18px] bg-white p-4 shadow-sm"><p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">To</p><p className="mt-2 truncate text-sm font-semibold text-slate-800">{pkg.destination}</p><p className="mt-1 text-xs text-slate-400">Destination</p></div></div></section>
-
-      <section className="px-4 pt-4"><div className="rounded-[22px] bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xs text-slate-400">Courier</p><p className="mt-1 text-sm font-bold text-slate-800">{pkg.carrier}</p><p className="mt-1 font-mono text-xs text-slate-400">Ref. {code}</p></div><div className="grid size-11 place-items-center rounded-xl bg-blue-50 text-blue-600"><Package className="size-5" /></div></div><button onClick={() => setDetailsOpen((open) => !open)} className="mt-4 flex w-full items-center justify-between border-t border-slate-100 pt-4 text-left text-sm font-semibold text-blue-600"><span>Package details</span><Info className="size-4" /></button>{detailsOpen && <div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] text-slate-400">Weight</p><p className="mt-1 text-xs font-bold text-slate-700">{pkg.weight || "—"}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] text-slate-400">Type</p><p className="mt-1 text-xs font-bold text-slate-700">Package</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] text-slate-400">Method</p><p className="mt-1 truncate text-xs font-bold text-slate-700">{pkg.delivery_method || "Standard"}</p></div></div>}</div></section>
-
-      <section className="flex gap-2 px-4 pt-5"><button onClick={() => { setDrawerTab("alerts"); setDrawerOpen(true); }} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-semibold text-slate-700 shadow-sm"><Phone className="size-4 text-blue-600" /> Contact Courier</button><button onClick={() => setDetailsOpen(true)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-semibold text-slate-700 shadow-sm"><Info className="size-4 text-blue-600" /> View Details</button><button onClick={shareTracking} className="grid size-12 place-items-center rounded-xl bg-blue-600 text-white shadow-sm" aria-label="Share tracking">{shared ? <CheckCheck className="size-4" /> : <Share2 className="size-4" />}</button></section>
-    </main>
-  );
-}
-
 // ─── Main TrackingView ────────────────────────────────────────────────────────
 
 function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: () => void }) {
@@ -1262,6 +1484,140 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
   const originMarkerRef = useRef<any>(null);
   const destMarkerRef = useRef<any>(null);
 
+  // Google Maps Driving Directions & Traffic Layer
+  const [googleDirections, setGoogleDirections] = useState<GoogleDirectionsResult | null>(null);
+  const [isTrafficEnabled, setIsTrafficEnabled] = useState<boolean>(false);
+  const trafficLayerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!pkg.origin || !pkg.destination) return;
+    let isMounted = true;
+    fetchGoogleMapsDrivingRoute(pkg.origin, pkg.destination).then((res) => {
+      if (isMounted && res) {
+        setGoogleDirections(res);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [pkg.origin, pkg.destination]);
+
+  const handleToggleTraffic = useCallback(() => {
+    if (!mapInstanceRef.current || !googleRef.current) return;
+    if (!trafficLayerRef.current) {
+      trafficLayerRef.current = new googleRef.current.maps.TrafficLayer();
+    }
+    const nextState = !isTrafficEnabled;
+    trafficLayerRef.current.setMap(nextState ? mapInstanceRef.current : null);
+    setIsTrafficEnabled(nextState);
+  }, [isTrafficEnabled]);
+
+  // Email Notification & Firestore persistence state
+  const [notifyEmail, setNotifyEmail] = useState<string>(pkg.receiver_email || "");
+  const [isNotifySubscribed, setIsNotifySubscribed] = useState<boolean>(false);
+  const [showQuickNotifyInput, setShowQuickNotifyInput] = useState<boolean>(false);
+  const [isSavingFirestore, setIsSavingFirestore] = useState<boolean>(false);
+
+  // Print Shipping Label Modal state
+  const [showPrintLabelModal, setShowPrintLabelModal] = useState<boolean>(false);
+
+  // Success Toast Notification state & auto-dismiss handler
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [successToast, setSuccessToast] = useState<{
+    title: string;
+    description: string;
+    email: string;
+  } | null>(null);
+
+  const triggerEmailSuccessToast = useCallback((email: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setSuccessToast({
+      title: "Email Notifications Enabled",
+      description: "Shipment status updates and arrival notifications will be sent to your inbox.",
+      email,
+    });
+    toastTimerRef.current = setTimeout(() => {
+      setSuccessToast(null);
+    }, 5000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Check if Firestore document has saved email on mount
+    getNotificationEmailFromFirestore(code).then((saved) => {
+      if (saved) {
+        setNotifyEmail(saved);
+        setIsNotifySubscribed(true);
+      }
+    });
+  }, [code]);
+
+  const handleQuickNotifyToggle = async (checked: boolean) => {
+    if (!checked) {
+      setIsNotifySubscribed(false);
+      setShowQuickNotifyInput(false);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setSuccessToast(null);
+    } else {
+      if (notifyEmail && notifyEmail.includes("@")) {
+        setIsSavingFirestore(true);
+        try {
+          await saveNotificationEmailToFirestore(code, notifyEmail, pkg);
+          await subscribeToAlerts({
+            email: notifyEmail,
+            trackingCode: code,
+            status: pkg.status,
+            eta: pkg.eta,
+            from: pkg.origin,
+            to: pkg.destination,
+          });
+          setIsNotifySubscribed(true);
+          setShowQuickNotifyInput(false);
+          triggerEmailSuccessToast(notifyEmail);
+        } catch (err) {
+          console.error("Failed to save email to Firestore:", err);
+          setShowQuickNotifyInput(true);
+        } finally {
+          setIsSavingFirestore(false);
+        }
+      } else {
+        setShowQuickNotifyInput(true);
+      }
+    }
+  };
+
+  const handleQuickSaveEmail = async () => {
+    if (!notifyEmail || !notifyEmail.includes("@")) return;
+    setIsSavingFirestore(true);
+    try {
+      await saveNotificationEmailToFirestore(code, notifyEmail, pkg);
+      await subscribeToAlerts({
+        email: notifyEmail,
+        trackingCode: code,
+        status: pkg.status,
+        eta: pkg.eta,
+        from: pkg.origin,
+        to: pkg.destination,
+      });
+      setIsNotifySubscribed(true);
+      setShowQuickNotifyInput(false);
+      triggerEmailSuccessToast(notifyEmail);
+    } catch (err) {
+      console.error("Failed to save email to Firestore:", err);
+    } finally {
+      setIsSavingFirestore(false);
+    }
+  };
+
   useEffect(() => {
     const t = setInterval(() => { setCurrentTime(new Date()); setSecsAgo((s) => s + 1); }, 1000);
     return () => clearInterval(t);
@@ -1296,10 +1652,10 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
     const isMoving = playing && posIdx < TOTAL - 1;
 
     const latLng = new googleRef.current.maps.LatLng(pos[0], pos[1]);
-    vehicleOverlayRef.current?.setPositionAndState(latLng, isMoving, b);
+    vehicleOverlayRef.current?.setPositionAndState(latLng, isMoving, b, effectiveStepMs);
     donePolyRef.current?.setPath(fullPath.slice(0, posIdx + 1).map((p) => ({ lat: p[0], lng: p[1] })));
     remainPolyRef.current?.setPath(fullPath.slice(posIdx).map((p) => ({ lat: p[0], lng: p[1] })));
-  }, [posIdx, playing]);
+  }, [posIdx, playing, effectiveStepMs]);
 
   // Smooth camera tracking when following is active
   useEffect(() => {
@@ -1437,12 +1793,17 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
           panes?.overlayMouseTarget.appendChild(this.div);
         }
 
-        setPositionAndState(pos: any, moving: boolean, brg: number) {
+        setPositionAndState(pos: any, moving: boolean, brg: number, durationMs: number = 300) {
           this.pos = pos;
           this.moving = moving;
           this.brg = brg;
           if (this.div) {
             this.div.innerHTML = vehicleMarkerHtml(this.moving, this.brg);
+            if (moving && durationMs > 50) {
+              this.div.style.transition = `left ${durationMs}ms linear, top ${durationMs}ms linear`;
+            } else {
+              this.div.style.transition = "none";
+            }
           }
           this.draw();
         }
@@ -1453,8 +1814,8 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
           if (!projection) return;
           const point = projection.fromLatLngToDivPixel(this.pos);
           if (point) {
-            this.div.style.left = `${point.x - 14}px`;
-            this.div.style.top = `${point.y - 22}px`;
+            this.div.style.left = `${point.x - 16}px`;
+            this.div.style.top = `${point.y - 24}px`;
           }
         }
 
@@ -1483,6 +1844,8 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
 
     return () => {
       isMounted = false;
+      trafficLayerRef.current?.setMap(null);
+      trafficLayerRef.current = null;
       vehicleOverlayRef.current?.setMap(null);
       donePolyRef.current?.setMap(null);
       remainPolyRef.current?.setMap(null);
@@ -1498,13 +1861,24 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
     const pos = fullPath[posIdx];
     if (pos && mapInstanceRef.current) {
       mapInstanceRef.current.panTo({ lat: pos[0], lng: pos[1] });
-      mapInstanceRef.current.setZoom(14);
+      mapInstanceRef.current.setZoom(15);
+      if (typeof mapInstanceRef.current.setHeading === "function") {
+        try {
+          mapInstanceRef.current.setHeading(bearing);
+          mapInstanceRef.current.setTilt(45);
+        } catch {}
+      }
     }
-  }, [fullPath, posIdx]);
+  }, [fullPath, posIdx, bearing]);
 
   const handleToggleOverview = useCallback(() => {
     setIsCameraFollowing(false);
     if (mapInstanceRef.current && fullPath.length > 0 && googleRef.current) {
+      try {
+        if (typeof mapInstanceRef.current.setTilt === "function") {
+          mapInstanceRef.current.setTilt(0);
+        }
+      } catch {}
       const bounds = new googleRef.current.maps.LatLngBounds();
       fullPath.forEach((p) => bounds.extend({ lat: p[0], lng: p[1] }));
       mapInstanceRef.current.fitBounds(bounds, 80);
@@ -1571,27 +1945,6 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
     return "from-red-600 to-yellow-500";
   };
 
-  return <MobileTrackingLayout
-    pkg={pkg}
-    code={code}
-    onBack={onBack}
-    mapRef={mapRef}
-    mapLoading={mapLoading}
-    mapError={mapError}
-    progress={progress}
-    isDelivered={isDelivered}
-    playing={playing}
-    simSpeed={simSpeed}
-    deliveryEstimate={deliveryEstimate}
-    currentCoord={currentCoord}
-    fullPath={fullPath}
-    posIdx={posIdx}
-    handleRecenterCamera={handleRecenterCamera}
-    handleToggleOverview={handleToggleOverview}
-    setDrawerOpen={setDrawerOpen}
-    setDrawerTab={setDrawerTab}
-  />;
-
   return (
     <div className="relative bg-[#080808] text-white overflow-hidden animate-fade-in" style={{ height: "100dvh", width: "100vw" }}>
 
@@ -1614,97 +1967,7 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
         </div>
       )}
 
-      {/* Google Maps Controls (Map Type switcher, Zoom & Overview) */}
-      <div className="absolute bottom-20 left-3 z-20 pointer-events-auto flex flex-col gap-2">
-        {/* Map Type Switcher */}
-        <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-xl p-1 flex items-center gap-1 shadow-xl">
-          <button
-            onClick={() => handleSwitchMapTheme("dark")}
-            className={`px-2.5 py-1 rounded-lg text-[10px] font-medium flex items-center gap-1.5 transition-all ${
-              mapTheme === "dark"
-                ? "bg-red-600/25 text-red-400 border border-red-600/30 font-semibold"
-                : "text-white/40 hover:text-white/80"
-            }`}
-            title="Tesla Dark Vector Map"
-          >
-            <Moon className="w-3 h-3" />
-            <span>Dark</span>
-          </button>
-          <button
-            onClick={() => handleSwitchMapTheme("satellite")}
-            className={`px-2.5 py-1 rounded-lg text-[10px] font-medium flex items-center gap-1.5 transition-all ${
-              mapTheme === "satellite"
-                ? "bg-red-600/25 text-red-400 border border-red-600/30 font-semibold"
-                : "text-white/40 hover:text-white/80"
-            }`}
-            title="Google Earth Satellite & Roads"
-          >
-            <Layers className="w-3 h-3" />
-            <span>Satellite</span>
-          </button>
-          <button
-            onClick={() => handleSwitchMapTheme("roadmap")}
-            className={`px-2.5 py-1 rounded-lg text-[10px] font-medium flex items-center gap-1.5 transition-all ${
-              mapTheme === "roadmap"
-                ? "bg-red-600/25 text-red-400 border border-red-600/30 font-semibold"
-                : "text-white/40 hover:text-white/80"
-            }`}
-            title="Google Maps Roadmap"
-          >
-            <MapIcon className="w-3 h-3" />
-            <span>Roadmap</span>
-          </button>
-        </div>
-
-        {/* Camera and Zoom Controls */}
-        <div className="flex items-center gap-1.5">
-          <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-xl p-1 flex items-center gap-0.5 shadow-xl">
-            <button
-              onClick={handleZoomIn}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-              title="Zoom In"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-            <div className="w-px h-4 bg-white/10" />
-            <button
-              onClick={handleZoomOut}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-              title="Zoom Out"
-            >
-              <Minus className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-xl p-1 flex items-center gap-0.5 shadow-xl">
-            <button
-              onClick={handleRecenterCamera}
-              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
-                isCameraFollowing
-                  ? "bg-red-600/20 text-red-400 border border-red-600/30"
-                  : "text-white/60 hover:text-white hover:bg-white/10"
-              }`}
-              title="Recenter to Vehicle"
-            >
-              <Crosshair className="w-4 h-4" />
-            </button>
-            <div className="w-px h-4 bg-white/10" />
-            <button
-              onClick={handleToggleOverview}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-              title="Route Overview"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Google Maps Platform Badge */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/80 border border-white/8 text-[9px] text-white/40 w-fit backdrop-blur-sm">
-          <MapPin className="w-2.5 h-2.5 text-red-500" />
-          <span>Google Maps Platform</span>
-        </div>
-      </div>
+      {/* Google Maps Controls: Moved under unified menu Drawer ('Map' & 'Controls' tabs) */}
 
       {/* ══ FLOATING HEADER ═════════════════════════════════════════════════════ */}
       <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
@@ -1735,6 +1998,59 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
               <span className="text-[10px] font-mono text-white/30 tabular-nums hidden md:inline">
                 {currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
+
+              {/* 'Notify me via email' Checkbox Pill (Firestore Persistence) */}
+              <div
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all ${
+                  isNotifySubscribed
+                    ? "bg-emerald-500/15 border-emerald-500/35 text-emerald-300"
+                    : "bg-white/5 hover:bg-white/10 border-white/10 text-white/80"
+                }`}
+              >
+                <label
+                  htmlFor="top-notify-email-checkbox"
+                  className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium"
+                >
+                  <input
+                    type="checkbox"
+                    id="top-notify-email-checkbox"
+                    checked={isNotifySubscribed}
+                    onChange={(e) => handleQuickNotifyToggle(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 text-red-600 focus:ring-0 cursor-pointer accent-red-600"
+                  />
+                  <span>
+                    {isNotifySubscribed ? "Email Alerts Active" : "Notify me via email"}
+                  </span>
+                </label>
+                {isSavingFirestore && <Loader2 className="w-2.5 h-2.5 animate-spin text-red-400" />}
+              </div>
+
+              {/* 'Print Label' Quick Action Button */}
+              <button
+                id="header-print-label-btn"
+                onClick={() => setShowPrintLabelModal(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white/80 hover:text-white transition-all text-[10px] font-medium cursor-pointer"
+                title="Print Official Shipping Label & Waybill"
+              >
+                <Printer className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                <span className="hidden sm:inline">Print Label</span>
+                <span className="sm:hidden">Print</span>
+              </button>
+
+              <div className="w-px h-4 bg-white/10 flex-shrink-0" />
+              <button
+                id="header-menu-toggle-btn"
+                onClick={() => setDrawerOpen((o) => !o)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all ${
+                  drawerOpen
+                    ? "bg-red-600/25 border-red-500/50 text-red-400 font-semibold"
+                    : "bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white"
+                }`}
+                title="Open Unified Control Menu"
+              >
+                <Menu className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-medium hidden sm:inline">Menu</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1746,28 +2062,30 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
           <button
             onClick={() => setDrawerOpen((o) => !o)}
             className="group flex flex-col items-center justify-center gap-1.5 w-10 py-4 bg-black/85 backdrop-blur-md border border-white/10 border-r-0 rounded-tl-2xl shadow-xl transition-all hover:bg-black/95"
+            title="Open Unified Delivery Menu"
           >
             {drawerOpen
               ? <X className="w-4 h-4 text-white/60 group-hover:text-white/90 transition-colors" />
-              : <List className="w-4 h-4 text-white/60 group-hover:text-white/90 transition-colors" />
+              : <Menu className="w-4 h-4 text-white/60 group-hover:text-white/90 transition-colors" />
             }
           </button>
 
-          {(["timeline", "alerts", "docs"] as DrawerTab[]).map((tab, i) => {
-            const icons = { timeline: List, alerts: Bell, docs: FileText };
-            const labels = { timeline: "Track", alerts: "Alerts", docs: "Docs" };
+          {(["timeline", "places", "controls", "map", "alerts", "templates", "docs"] as DrawerTab[]).map((tab, i) => {
+            const icons = { timeline: List, places: MapPin, controls: Navigation, map: Layers, alerts: Bell, templates: Mail, docs: FileText };
+            const labels = { timeline: "Track", places: "Maps Data", controls: "Controls", map: "Map", alerts: "Alerts", templates: "Templates", docs: "Docs" };
             const Icon = icons[tab];
-            const isLast = i === 2;
+            const isLast = i === 6;
             return (
               <button key={tab}
                 onClick={() => { setDrawerTab(tab); setDrawerOpen(true); }}
-                className={`group flex flex-col items-center justify-center gap-1 w-10 py-3.5 backdrop-blur-md border border-white/10 border-r-0 border-t-0 shadow-xl transition-all ${
+                className={`group flex flex-col items-center justify-center gap-1 w-10 py-3 backdrop-blur-md border border-white/10 border-r-0 border-t-0 shadow-xl transition-all ${
                   isLast ? "rounded-bl-2xl" : ""
                 } ${
                   drawerOpen && drawerTab === tab
                     ? "bg-red-600/25 border-red-600/30 text-red-400"
                     : "bg-black/75 hover:bg-black/90 text-white/30 hover:text-white/70"
                 }`}
+                title={`Open ${labels[tab]}`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span className="text-[7px] tracking-wide"
@@ -1787,36 +2105,36 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
       )}
 
       <div
-        className="absolute top-0 right-0 bottom-0 z-30 w-80 max-w-[85vw] bg-[#0b0b0b] border-l border-white/8 flex flex-col shadow-2xl transition-transform duration-300 ease-in-out"
+        className={`absolute top-0 right-0 bottom-0 z-30 ${drawerTab === "templates" ? "w-[640px] max-w-[96vw]" : "w-80 max-w-[85vw]"} bg-[#0b0b0b] border-l border-white/8 flex flex-col shadow-2xl transition-all duration-300 ease-in-out`}
         style={{ transform: drawerOpen ? "translateX(0)" : "translateX(100%)" }}
       >
         {/* Drawer header */}
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/8 flex-shrink-0">
-          <div className="flex items-center gap-1 bg-white/4 rounded-xl border border-white/8 p-0.5">
-            {(["timeline", "alerts", "docs"] as DrawerTab[]).map((tab) => {
-              const icons = { timeline: List, alerts: Bell, docs: FileText };
-              const labels = { timeline: "Timeline", alerts: "Alerts", docs: "Docs" };
+        <div className="flex items-center justify-between px-3 py-3 border-b border-white/8 flex-shrink-0">
+          <div className="flex items-center gap-1 bg-white/4 rounded-xl border border-white/8 p-0.5 overflow-x-auto scrollbar-none">
+            {(["timeline", "places", "controls", "map", "alerts", "templates", "docs"] as DrawerTab[]).map((tab) => {
+              const icons = { timeline: List, places: MapPin, controls: Navigation, map: Layers, alerts: Bell, templates: Mail, docs: FileText };
+              const labels = { timeline: "Timeline", places: "Maps Data", controls: "Controls", map: "Map", alerts: "Alerts", templates: "Templates", docs: "Docs" };
               const Icon = icons[tab];
               return (
                 <button key={tab} onClick={() => setDrawerTab(tab)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all ${
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-medium transition-all whitespace-nowrap ${
                     drawerTab === tab
-                      ? "bg-red-600/20 text-red-400 border border-red-600/30"
+                      ? "bg-red-600/20 text-red-400 border border-red-600/30 font-semibold"
                       : "text-white/35 hover:text-white/60"
                   }`}>
-                  <Icon className="w-3 h-3" /> {labels[tab]}
+                  <Icon className="w-3 h-3 flex-shrink-0" /> {labels[tab]}
                 </button>
               );
             })}
           </div>
           <button onClick={() => setDrawerOpen(false)}
-            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/4 hover:bg-white/10 border border-white/8 text-white/40 hover:text-white/70 transition-all">
+            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/4 hover:bg-white/10 border border-white/8 text-white/40 hover:text-white/70 transition-all flex-shrink-0 ml-1.5">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Drawer content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           {drawerTab === "timeline" && (
             <TimelinePanel
               pkg={pkg} code={code} progress={progress} simSpeed={simSpeed}
@@ -1824,15 +2142,297 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
               currentCoord={currentCoord}
               deliveryEstimate={deliveryEstimate}
               getProgressGradient={getProgressGradient}
+              onOpenPlaces={() => { setDrawerTab("places"); setDrawerOpen(true); }}
             />
           )}
+
+          {/* Google Maps Grounding & Place Intelligence */}
+          {drawerTab === "places" && (
+            <GoogleMapsGroundingPanel pkg={pkg} trackingCode={code} />
+          )}
+
+          {/* Unified Controls & Navigation Tab */}
+          {drawerTab === "controls" && (
+            <div className="p-4 space-y-4">
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-wider text-white/40 font-semibold">Navigation & HUD</span>
+                <div className="mt-2 space-y-2">
+                  <button
+                    onClick={() => {
+                      setIsNavMode((n) => {
+                        const next = !n;
+                        try {
+                          localStorage.setItem("navigation_hud_enabled", String(next));
+                        } catch {}
+                        return next;
+                      });
+                      if (!isNavMode) handleRecenterCamera();
+                    }}
+                    className={`w-full p-3 rounded-xl border flex items-center justify-between transition-all ${
+                      isNavMode
+                        ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-300"
+                        : "bg-white/[0.03] border-white/8 hover:bg-white/[0.06] text-white/70"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isNavMode ? "bg-emerald-500/20" : "bg-white/5"}`}>
+                        <Navigation className={`w-4 h-4 ${isNavMode ? "text-emerald-400" : "text-white/50"}`} />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-xs font-semibold">Google Maps Turn-by-Turn HUD</div>
+                        <div className="text-[10px] text-white/40">Real-time turn navigation overlay</div>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                      isNavMode ? "bg-emerald-500/30 text-emerald-300" : "bg-white/10 text-white/40"
+                    }`}>
+                      {isNavMode ? "ACTIVE" : "OFF"}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={handleToggleTraffic}
+                    className={`w-full p-3 rounded-xl border flex items-center justify-between transition-all ${
+                      isTrafficEnabled
+                        ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
+                        : "bg-white/[0.03] border-white/8 hover:bg-white/[0.06] text-white/70"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isTrafficEnabled ? "bg-amber-500/20" : "bg-white/5"}`}>
+                        <Layers className={`w-4 h-4 ${isTrafficEnabled ? "text-amber-400" : "text-white/50"}`} />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-xs font-semibold">Live Traffic Overlay</div>
+                        <div className="text-[10px] text-white/40">Google congestion heatmap</div>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                      isTrafficEnabled ? "bg-amber-500/30 text-amber-300" : "bg-white/10 text-white/40"
+                    }`}>
+                      {isTrafficEnabled ? "ENABLED" : "DISABLED"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Simulation Playback & Speed */}
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-wider text-white/40 font-semibold">Delivery Simulation</span>
+                <div className="mt-2 p-3.5 rounded-xl bg-white/[0.03] border border-white/8 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-red-600"
+                        style={{
+                          boxShadow: playing && !isDelivered ? "0 0 8px rgba(220,38,38,0.9)" : "none",
+                          animation: playing && !isDelivered ? "pulse-live 1.4s ease-in-out infinite" : "none",
+                        }} />
+                      <span className="text-xs font-medium text-white/80">
+                        {isDelivered ? "Delivered" : playing ? `Live · ${simSpeed} km/h` : "Paused"}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-white/40">Est: {deliveryEstimate.shortEstimate}</span>
+                  </div>
+
+                  {!isDelivered && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setPlaying((p) => !p)}
+                          className={`py-2 px-3 rounded-lg border flex items-center justify-center gap-2 text-xs font-medium transition-all ${
+                            playing
+                              ? "bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30"
+                              : "bg-emerald-600/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30"
+                          }`}
+                        >
+                          {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                          {playing ? "Pause" : "Play"}
+                        </button>
+                        <button
+                          onClick={handleReset}
+                          className="py-2 px-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center gap-2 text-xs font-medium text-white/70 hover:text-white transition-all"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Reset
+                        </button>
+                      </div>
+
+                      <div>
+                        <div className="text-[10px] text-white/50 mb-1.5 flex items-center justify-between">
+                          <span>Playback Speed Multiplier</span>
+                          <span className="text-red-400 font-mono font-bold">{speedMultiplier}x</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[1, 2, 5, 10].map((mult) => (
+                            <button
+                              key={mult}
+                              onClick={() => setSpeedMultiplier(mult)}
+                              className={`py-1.5 rounded-lg text-xs font-mono font-bold transition-all border ${
+                                speedMultiplier === mult
+                                  ? "bg-red-500/20 text-red-400 border-red-500/40"
+                                  : "bg-white/5 border-white/5 text-white/40 hover:text-white/80 hover:bg-white/10"
+                              }`}
+                            >
+                              {mult}x
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Unified Map & Camera Settings Tab */}
+          {drawerTab === "map" && (
+            <div className="p-4 space-y-4">
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-wider text-white/40 font-semibold">Map Display Theme</span>
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  <button
+                    onClick={() => handleSwitchMapTheme("dark")}
+                    className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                      mapTheme === "dark"
+                        ? "bg-red-600/20 text-red-400 border-red-600/40 font-semibold"
+                        : "bg-white/[0.03] border-white/8 text-white/50 hover:text-white/80 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <Moon className="w-4 h-4" />
+                    <span className="text-[10px]">Tesla Dark</span>
+                  </button>
+                  <button
+                    onClick={() => handleSwitchMapTheme("satellite")}
+                    className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                      mapTheme === "satellite"
+                        ? "bg-red-600/20 text-red-400 border-red-600/40 font-semibold"
+                        : "bg-white/[0.03] border-white/8 text-white/50 hover:text-white/80 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <Layers className="w-4 h-4" />
+                    <span className="text-[10px]">Satellite</span>
+                  </button>
+                  <button
+                    onClick={() => handleSwitchMapTheme("roadmap")}
+                    className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                      mapTheme === "roadmap"
+                        ? "bg-red-600/20 text-red-400 border-red-600/40 font-semibold"
+                        : "bg-white/[0.03] border-white/8 text-white/50 hover:text-white/80 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <MapIcon className="w-4 h-4" />
+                    <span className="text-[10px]">Roadmap</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-wider text-white/40 font-semibold">Camera & Viewport</span>
+                <div className="mt-2 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleRecenterCamera}
+                      className={`p-3 rounded-xl border flex items-center gap-2 transition-all ${
+                        isCameraFollowing
+                          ? "bg-red-600/20 border-red-600/40 text-red-400"
+                          : "bg-white/[0.03] border-white/8 text-white/70 hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <Crosshair className="w-4 h-4" />
+                      <div className="text-left">
+                        <div className="text-xs font-medium">Recenter</div>
+                        <div className="text-[9px] text-white/40">Follow Tesla</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={handleToggleOverview}
+                      className="p-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/8 text-white/70 hover:text-white flex items-center gap-2 transition-all"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                      <div className="text-left">
+                        <div className="text-xs font-medium">Full Route</div>
+                        <div className="text-[9px] text-white/40">Fit Bounds</div>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/8 flex items-center justify-between">
+                    <span className="text-xs text-white/70 font-medium">Zoom Controls</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={handleZoomIn}
+                        className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                        title="Zoom In"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={handleZoomOut}
+                        className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                        title="Zoom Out"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {drawerTab === "alerts" && (
             <NotificationsPanel
-              pkg={pkg} trackingCode={code} simSpeed={simSpeed}
-              secsAgo={secsAgo} playing={playing}
+              pkg={pkg}
+              trackingCode={code}
+              simSpeed={simSpeed}
+              secsAgo={secsAgo}
+              playing={playing}
+              externalEmail={notifyEmail}
+              isExternalSubscribed={isNotifySubscribed}
+              onNotifyUpdated={(newEmail, subscribed, isUserAction) => {
+                setNotifyEmail(newEmail);
+                setIsNotifySubscribed(subscribed);
+                if (subscribed && isUserAction && newEmail) {
+                  triggerEmailSuccessToast(newEmail);
+                }
+              }}
             />
           )}
-          {drawerTab === "docs" && <DocumentsPanel code={code} pkg={pkg} />}
+          {drawerTab === "templates" && (
+            <div className="h-full flex flex-col overflow-y-auto">
+              <div className="p-4 border-b border-white/6 flex items-center justify-between flex-shrink-0 bg-white/[0.02]">
+                <div>
+                  <div className="text-[9px] text-white/30 uppercase tracking-widest font-semibold">Tracking Mail Templates</div>
+                  <p className="text-[11px] text-white/50 mt-0.5">Automated carrier notification templates for <span className="font-mono text-white/80">{code}</span></p>
+                </div>
+                <button
+                  id="templates-print-label-shortcut-btn"
+                  onClick={() => setShowPrintLabelModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-medium transition-all cursor-pointer"
+                  title="Print Shipping Label"
+                >
+                  <Printer className="w-3.5 h-3.5 text-red-400" />
+                  <span>Print Label</span>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <TrackingEmailTemplatesTab
+                  packages={[pkg]}
+                  initialPackageCode={code}
+                  onTrack={() => {}}
+                />
+              </div>
+            </div>
+          )}
+          {drawerTab === "docs" && (
+            <DocumentsPanel
+              code={code}
+              pkg={pkg}
+              onOpenPrintLabel={() => setShowPrintLabelModal(true)}
+              onOpenTemplates={() => setDrawerTab("templates")}
+            />
+          )}
         </div>
 
         <div className="px-5 py-3 border-t border-white/6 flex-shrink-0 flex items-center justify-between">
@@ -1840,14 +2440,18 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
             <img src="/tesla-logo.png" alt="TeslaTrack" className="logo-spin w-6 h-6 object-contain opacity-50" />
             <span className="text-[9px] text-white/20 uppercase tracking-widest font-semibold">TeslaTrack</span>
           </div>
+          <div className="flex items-center gap-1.5 text-[9px] text-white/30">
+            <MapPin className="w-2.5 h-2.5 text-red-500" />
+            <span>Google Maps Platform</span>
+          </div>
         </div>
       </div>
 
       {/* ══ MAP OVERLAYS ════════════════════════════════════════════════════════ */}
 
-      {/* MapLibre iOS Turn-by-Turn Navigation HUD */}
+      {/* Google Maps Delivery Turn-by-Turn Navigation HUD */}
       {isNavMode && (
-        <MapLibreNavigationHUD
+        <GoogleMapsNavigationHUD
           currentCoord={currentCoord}
           destinationCoord={destCoord}
           fullPath={fullPath}
@@ -1862,45 +2466,29 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
           onToggleOverview={handleToggleOverview}
           isCameraFollowing={isCameraFollowing}
           onCloseNav={() => setIsNavMode(false)}
+          deliveryInfo={{
+            recipientName: pkg.receiver_name,
+            recipientPhone: pkg.receiver_phone,
+            recipientAddress: pkg.receiver_address || pkg.destination,
+            trackingCode: code,
+            weight: pkg.weight,
+          }}
+          onMarkDelivered={() => {
+            setPosIdx(TOTAL - 1);
+            setPlaying(false);
+            deliveryFiredRef.current = true;
+            notifyDelivered(code);
+          }}
+          googleDirections={googleDirections}
+          onToggleTraffic={handleToggleTraffic}
+          isTrafficEnabled={isTrafficEnabled}
         />
       )}
 
-      {/* Navigation Mode — top right */}
-      <div className="absolute top-16 right-3 sm:top-20 z-20 pointer-events-auto flex items-center gap-2">
-        {/* Toggle Always-On MapLibre Navigation HUD button */}
-        <button
-          onClick={() => {
-            setIsNavMode((n) => {
-              const next = !n;
-              try {
-                localStorage.setItem("navigation_hud_enabled", String(next));
-              } catch {}
-              return next;
-            });
-            if (!isNavMode) handleRecenterCamera();
-          }}
-          className={`border rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-xl transition-all ${
-            isNavMode
-              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30"
-              : "bg-black/90 hover:bg-black text-white/70 hover:text-white border-white/10 hover:border-white/20"
-          }`}
-          title={isNavMode ? "Always-On Turn-by-Turn Navigation Active" : "Enable Always-On Turn Navigation"}
-        >
-          <div className="relative flex items-center justify-center">
-            <Navigation className={`w-3.5 h-3.5 ${isNavMode ? "text-emerald-400 fill-emerald-400" : "text-white/60"}`} />
-            {isNavMode && (
-              <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            )}
-          </div>
-          <span className="text-xs font-semibold">
-            {isNavMode ? "Always-On Nav" : "Enable Nav"}
-          </span>
-        </button>
-      </div>
-
-      {/* Non-nav live badge & simulation speed controls — top left when nav is off or collapsed */}
+      {/* Redundant floating controls moved cleanly into the Drawer 'Controls' & 'Map' tabs */}
+      {/* Live status badge & delivery estimate date overlay */}
       {!isNavMode && (
-        <div className="absolute top-20 left-3 z-20 space-y-1.5 pointer-events-auto">
+        <div className="absolute top-16 sm:top-20 left-3 z-20 space-y-1.5 pointer-events-auto">
           <div className="bg-black/90 border border-white/8 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-lg">
             <div className="w-2 h-2 rounded-full bg-red-600 flex-shrink-0"
               style={{
@@ -1920,44 +2508,6 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
         </div>
       )}
 
-      {/* Simulation Playback & Speed Fast Forward controls */}
-      {!isDelivered && (
-        <div className="absolute top-36 sm:top-40 left-3 z-20 pointer-events-auto">
-          <div className="flex flex-col gap-0 bg-black/90 border border-white/10 rounded-2xl overflow-hidden shadow-xl backdrop-blur-md">
-            <button onClick={() => setPlaying((p) => !p)}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-white/8 transition-colors text-white/70 hover:text-white">
-              {playing ? <Pause className="w-3.5 h-3.5 text-amber-400" /> : <Play className="w-3.5 h-3.5 text-emerald-400" />}
-              <span className="text-[10px] font-medium">{playing ? "Pause" : "Play"}</span>
-            </button>
-            <div className="h-px bg-white/8" />
-            <button onClick={handleReset}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-white/8 transition-colors text-white/50 hover:text-white/80">
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="text-[10px]">Reset</span>
-            </button>
-            <div className="h-px bg-white/8" />
-            
-            {/* Speed Multipliers */}
-            <div className="flex items-center p-1 bg-white/[0.03] gap-0.5">
-              {[1, 2, 5, 10].map((mult) => (
-                <button
-                  key={mult}
-                  onClick={() => setSpeedMultiplier(mult)}
-                  className={`px-1.5 py-1 rounded-lg text-[9px] font-mono font-bold transition-all ${
-                    speedMultiplier === mult
-                      ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                      : "text-white/30 hover:text-white/70 hover:bg-white/5"
-                  }`}
-                  title={`${mult}x Simulation Speed`}
-                >
-                  {mult}x
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Tesla-Style Vehicle Stats Dashboard Card — bottom right */}
       <div className="absolute bottom-20 sm:bottom-24 right-3 sm:right-4 z-20 pointer-events-auto">
         <TeslaVehicleDashboard
@@ -1972,18 +2522,35 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
         />
       </div>
 
-      {/* Route legend */}
+      {/* Route & Traffic legend */}
       <div className="absolute left-3 z-20 hidden sm:flex flex-col gap-1.5"
         style={{ top: isDelivered ? "5rem" : "15rem" }}>
-        <div className="bg-black/90 border border-white/8 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+        <div className="bg-black/90 border border-white/8 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 shadow-lg">
           <div className="w-4 h-0.5 bg-red-500 rounded" />
           <span className="text-[9px] text-white/30">Completed</span>
         </div>
-        <div className="bg-black/90 border border-white/8 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+        <div className="bg-black/90 border border-white/8 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 shadow-lg">
           <div className="w-4 h-0.5 rounded"
             style={{ backgroundImage: "repeating-linear-gradient(to right,#60a5fa 0,#60a5fa 4px,transparent 4px,transparent 8px)" }} />
           <span className="text-[9px] text-white/30">Remaining ({deliveryEstimate.remainingDistanceKm} km)</span>
         </div>
+
+        {/* Dynamic Real-Time Google Traffic Congestion Legend */}
+        {isTrafficEnabled && (
+          <div className="bg-black/95 border border-amber-500/30 rounded-xl px-2.5 py-2 flex flex-col gap-1.5 shadow-xl backdrop-blur-md animate-fade-in">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+              <span className="text-[9px] text-amber-300 font-semibold tracking-wider uppercase">Live Traffic</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-3 h-1.5 rounded-sm bg-emerald-500" title="Fast / No Delay" />
+              <span className="w-3 h-1.5 rounded-sm bg-amber-500" title="Moderate Congestion" />
+              <span className="w-3 h-1.5 rounded-sm bg-orange-600" title="Heavy Traffic" />
+              <span className="w-3 h-1.5 rounded-sm bg-red-700" title="Severe Delay" />
+              <span className="text-[8px] text-white/50 ml-1 font-mono">Fast → Slow</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom telemetry bar */}
@@ -2011,6 +2578,16 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
                   {i < arr.length - 1 && <div className="w-px h-5 bg-white/8 flex-shrink-0" />}
                 </div>
               ))}
+              <div className="w-px h-5 bg-white/8 flex-shrink-0" />
+              <button
+                id="bottom-print-label-btn"
+                onClick={() => setShowPrintLabelModal(true)}
+                className="px-3.5 py-2.5 flex items-center gap-1.5 text-white/70 hover:text-white hover:bg-white/5 transition-all text-xs font-medium cursor-pointer"
+                title="Print Shipping Label"
+              >
+                <Printer className="w-3.5 h-3.5 text-red-400" />
+                <span className="text-[10px] whitespace-nowrap">Print Label</span>
+              </button>
             </div>
           </div>
         </div>
@@ -2019,14 +2596,142 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
       {/* Delivered banner */}
       {isDelivered && (
         <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center px-3">
-          <div className="bg-[#0d2010] border border-green-500/30 rounded-2xl px-5 py-3 flex items-center gap-3 shadow-2xl">
-            <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
-            <div>
-              <div className="text-sm font-semibold text-green-300">Package Delivered</div>
-              <div className="text-[10px] text-green-400/60">Delivered · Final Destination Reached</div>
+          <div className="bg-[#0d2010] border border-green-500/30 rounded-2xl px-5 py-3 flex items-center justify-between gap-4 shadow-2xl max-w-md w-full">
+            <div className="flex items-center gap-3 min-w-0">
+              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <div>
+                <div className="text-sm font-semibold text-green-300">Package Delivered</div>
+                <div className="text-[10px] text-green-400/60">Delivered · Final Destination Reached</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowPrintLabelModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium border border-white/15 transition-all flex-shrink-0 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5 text-green-400" />
+              <span>Print Label</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 'Notify me via email' Quick Dialog */}
+      {showQuickNotifyInput && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#121215] border border-white/10 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-400 flex-shrink-0">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Notify me via email</h3>
+                  <p className="text-[10px] text-white/40">Saves to Firestore document for future updates</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowQuickNotifyInput(false)}
+                className="text-white/40 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase font-mono tracking-wider text-white/40">Email Address</label>
+              <input
+                type="email"
+                value={notifyEmail}
+                onChange={(e) => setNotifyEmail(e.target.value)}
+                placeholder="recipient@domain.com"
+                autoFocus
+                className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-red-500"
+                onKeyDown={(e) => e.key === "Enter" && handleQuickSaveEmail()}
+              />
+              <p className="text-[10px] text-white/35 leading-tight pt-1">
+                Saved directly to Firestore package document <span className="font-mono text-white/60">packages/{code.toUpperCase()}</span>.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => setShowQuickNotifyInput(false)}
+                className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 text-xs font-medium transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleQuickSaveEmail}
+                disabled={!notifyEmail.includes("@") || isSavingFirestore}
+                className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-red-900/30"
+              >
+                {isSavingFirestore ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</>
+                ) : (
+                  <><Check className="w-3.5 h-3.5" /> Save to Firestore</>
+                )}
+              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Success Toast Notification */}
+      {successToast && (
+        <div
+          id="email-notification-toast"
+          role="status"
+          aria-live="polite"
+          className="fixed top-20 right-4 sm:right-6 z-50 animate-fade-in pointer-events-auto max-w-sm w-full"
+        >
+          <div className="flex items-start gap-3 bg-[#0d131a]/95 border border-emerald-500/40 backdrop-blur-xl px-4 py-3 rounded-2xl text-white shadow-2xl shadow-black/80 ring-1 ring-emerald-500/20 transition-all">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0 mt-0.5">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0 pr-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-semibold text-white tracking-tight">{successToast.title}</h4>
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
+                  Firestore Synced
+                </span>
+              </div>
+              <p className="text-[11px] text-white/70 mt-1 leading-snug">
+                {successToast.description}
+              </p>
+              {successToast.email && (
+                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-emerald-300 font-mono bg-white/[0.04] border border-white/8 rounded-lg px-2 py-1 w-fit max-w-full">
+                  <Mail className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                  <span className="truncate max-w-[210px]">{successToast.email}</span>
+                </div>
+              )}
+            </div>
+            <button
+              id="dismiss-email-toast-btn"
+              onClick={() => {
+                if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+                setSuccessToast(null);
+              }}
+              className="text-white/40 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10 flex-shrink-0"
+              aria-label="Close notification"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Print Shipping Label Modal */}
+      {showPrintLabelModal && (
+        <PrintShippingLabelModal
+          pkg={pkg}
+          code={code}
+          deliveryEstimate={deliveryEstimate}
+          onClose={() => setShowPrintLabelModal(false)}
+          onOpenTemplates={() => {
+            setDrawerTab("templates");
+            setDrawerOpen(true);
+          }}
+        />
       )}
     </div>
   );

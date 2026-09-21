@@ -44,55 +44,14 @@ export type FetchPackageResult =
   | { ok: true; pkg: Package }
   | { ok: false; reason: "not_found" | "server_error" | "network_error" };
 
-const DEMO_PACKAGE: Package = {
-  code: "DEMO123",
-  status: "In Transit",
-  eta: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
-  origin: "San Francisco, CA",
-  destination: "Los Angeles, CA",
-  carrier: "SwiftLine Express",
-  weight: "4.8 kg",
-  speed_kph: 62,
-  start_progress: 0.58,
-  route: [
-    [37.7749, -122.4194],
-    [36.9741, -121.895],
-    [35.3733, -119.0187],
-    [34.0522, -118.2437],
-  ],
-  events: [
-    { time_label: "Today, 8:42 AM", label: "Order Confirmed", location: "San Francisco, CA", done: true, sort_order: 0 },
-    { time_label: "Today, 9:18 AM", label: "Picked Up", location: "San Francisco, CA", done: true, sort_order: 1 },
-    { time_label: "Today, 11:05 AM", label: "In Transit", location: "Bakersfield, CA", done: true, sort_order: 2 },
-    { time_label: "Estimated", label: "Out for Delivery", location: "Los Angeles, CA", done: false, sort_order: 3 },
-    { time_label: "Estimated", label: "Delivered", location: "Los Angeles, CA", done: false, sort_order: 4 },
-  ],
-  created_at: new Date().toISOString(),
-  sender_name: "Northstar Supply Co.",
-  sender_email: "shipping@northstar.example",
-  sender_phone: "",
-  sender_address: "San Francisco, CA",
-  receiver_name: "Jordan Lee",
-  receiver_email: "jordan@example.com",
-  receiver_phone: "",
-  receiver_address: "Los Angeles, CA",
-  delivery_method: "Express ground",
-  shipping_cost: 24.99,
-  customs_status: "Not required",
-  customs_fee: 0,
-};
-
 export async function fetchPackage(code: string): Promise<FetchPackageResult> {
-  const normalizedCode = code.trim().toUpperCase();
   try {
-    const res = await fetch(`${API}/packages/${encodeURIComponent(normalizedCode)}`);
-    if (res.status === 404) {
-      return normalizedCode === DEMO_PACKAGE.code ? { ok: true, pkg: DEMO_PACKAGE } : { ok: false, reason: "not_found" };
-    }
+    const res = await fetch(`${API}/packages/${encodeURIComponent(code.trim().toUpperCase())}`);
+    if (res.status === 404) return { ok: false, reason: "not_found" };
     if (!res.ok) return { ok: false, reason: "server_error" };
     return { ok: true, pkg: await res.json() };
   } catch {
-    return normalizedCode === DEMO_PACKAGE.code ? { ok: true, pkg: DEMO_PACKAGE } : { ok: false, reason: "network_error" };
+    return { ok: false, reason: "network_error" };
   }
 }
 
@@ -160,60 +119,63 @@ export async function sendTestSmtpEmail(to: string): Promise<{ success: boolean;
   }
 }
 
-export async function sendTestRegistrationEmail(payload: {
-  to: string;
-  code?: string;
-  name?: string;
-  role?: "receiver" | "sender";
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+export interface EmailTemplateMeta {
+  id: string;
+  name: string;
+  description: string;
+  category: "order" | "transit" | "out_for_delivery" | "delivered" | "customs";
+  defaultSubject: string;
+  badge: { label: string; bg: string; color: string; border: string };
+}
+
+export interface RenderedTemplate {
+  template: EmailTemplateMeta;
+  rendered: { subject: string; html: string; text: string };
+}
+
+export async function fetchEmailTemplates(): Promise<EmailTemplateMeta[]> {
   try {
-    const res = await fetch(`${API}/notify/test-registration-email`, {
+    const res = await fetch(`${API}/notify/templates`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.templates || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function previewEmailTemplate(
+  templateId: string,
+  data?: Record<string, any>
+): Promise<RenderedTemplate | null> {
+  try {
+    const res = await fetch(`${API}/notify/templates/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ templateId, data }),
     });
-    const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error || "Failed to send registration email" };
-    return { success: true, messageId: data.messageId };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "Network error" };
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
   }
 }
 
-export async function fetchPackageRegistrationPreview(
-  code: string,
-  role: "receiver" | "sender" = "receiver"
-): Promise<{ ok: boolean; html?: string; error?: string }> {
+export async function sendEmailTemplate(params: {
+  to: string;
+  templateId: string;
+  data?: Record<string, any>;
+  customSubject?: string;
+}): Promise<{ success: boolean; messageId?: string; simulated?: boolean; message?: string; error?: string }> {
   try {
-    const res = await fetch(`${API}/packages/${encodeURIComponent(code)}/registration-mail-preview?role=${role}`);
-    const data = await res.json();
-    if (!res.ok) return { ok: false, error: data.error || "Failed to load preview" };
-    return { ok: true, html: data.html };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || "Network error" };
-  }
-}
-
-export async function sendPackageRegistrationEmail(
-  token: string,
-  code: string,
-  options?: { targetEmail?: string; role?: "receiver" | "sender" }
-): Promise<{ success: boolean; messageId?: string; recipientEmail?: string; error?: string; smtpConfigured?: boolean }> {
-  try {
-    const res = await fetch(`${API}/admin/packages/${encodeURIComponent(code)}/send-registration-mail`, {
+    const res = await fetch(`${API}/notify/templates/send`, {
       method: "POST",
-      headers: adminHeaders(token),
-      body: JSON.stringify(options || {}),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
     });
     const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error || "Failed to send registration email" };
-    return {
-      success: data.success,
-      messageId: data.messageId,
-      recipientEmail: data.recipientEmail,
-      smtpConfigured: data.smtpConfigured,
-      error: data.error,
-    };
+    if (!res.ok) return { success: false, error: data.error || "Failed to dispatch email template" };
+    return data;
   } catch (err: any) {
     return { success: false, error: err?.message || "Network error" };
   }
@@ -293,14 +255,8 @@ export async function adminListPackages(token: string): Promise<Package[]> {
 
 export async function adminCreatePackage(
   token: string,
-  data: Omit<Package, "created_at"> & { notify_parties?: boolean }
-): Promise<{
-  success: boolean;
-  error?: string;
-  code?: string;
-  registrationEmailsSent?: { receiver?: boolean; sender?: boolean };
-  smtpConfigured?: boolean;
-}> {
+  data: Omit<Package, "created_at">
+): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch(`${API}/admin/packages`, {
       method: "POST",
@@ -309,12 +265,7 @@ export async function adminCreatePackage(
     });
     const json = await res.json();
     if (!res.ok) return { success: false, error: json.error ?? "Failed" };
-    return {
-      success: true,
-      code: json.code,
-      registrationEmailsSent: json.registrationEmailsSent,
-      smtpConfigured: json.smtpConfigured,
-    };
+    return { success: true };
   } catch {
     return { success: false, error: "Network error" };
   }
@@ -355,6 +306,87 @@ export async function adminDeletePackage(
     return { success: true };
   } catch {
     return { success: false, error: "Network error" };
+  }
+}
+
+export interface AiQuickTrackingPayload {
+  code: string;
+  status: string;
+  eta: string;
+  origin: string;
+  destination: string;
+  carrier: string;
+  weight: string;
+  speed_kph: number;
+  start_progress: number;
+  delivery_method: string;
+  shipping_cost: number;
+  customs_status: string;
+  customs_fee: number;
+  sender_name: string;
+  sender_email: string;
+  sender_phone: string;
+  sender_address: string;
+  receiver_name: string;
+  receiver_email: string;
+  receiver_phone: string;
+  receiver_address: string;
+  route: [number, number][];
+  events: PackageEvent[];
+  ai_insights?: string;
+}
+
+export async function adminAiQuickGenerate(
+  token: string,
+  payload: { prompt?: string; preset?: string }
+): Promise<{ ok: boolean; tracking?: AiQuickTrackingPayload; isAiGenerated?: boolean; reason?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API}/admin/ai/quick-track-generate`, {
+      method: "POST",
+      headers: adminHeaders(token),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || "Failed to generate tracking" };
+    return data;
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Network error" };
+  }
+}
+
+export async function adminAiQuickCreate(
+  token: string,
+  tracking: AiQuickTrackingPayload
+): Promise<{ ok: boolean; code?: string; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API}/admin/ai/quick-track-create`, {
+      method: "POST",
+      headers: adminHeaders(token),
+      body: JSON.stringify({ tracking }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || "Failed to create shipment" };
+    return data;
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Network error" };
+  }
+}
+
+export async function adminAiQuickAssist(
+  token: string,
+  question: string
+): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API}/admin/ai/quick-track-assist`, {
+      method: "POST",
+      headers: adminHeaders(token),
+      body: JSON.stringify({ question }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || "Failed to query AI" };
+    return data;
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Network error" };
   }
 }
 

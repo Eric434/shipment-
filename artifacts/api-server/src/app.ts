@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import path from "path";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -29,6 +30,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use("/public", express.static(path.join(__dirname, "../public")));
 app.use("/api", router);
 
 // Centralized JSON error handling

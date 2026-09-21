@@ -377,6 +377,8 @@ export async function sendRegistrationEmail(data: RegistrationEmailData): Promis
 
 // ─── Email Templates ─────────────────────────────────────────────────────────
 
+const TESLA_LOGO_URL = "https://img.icons8.com/?size=100&id=OinYGm0fZ470&format=png&color=000000";
+
 export async function sendSubscriptionEmail(
   to: string,
   trackingCode: string,
@@ -391,36 +393,56 @@ export async function sendSubscriptionEmail(
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0b0c10; color: #ffffff; margin: 0; padding: 24px; }
-    .card { max-width: 560px; margin: 0 auto; background: #15171e; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 32px; box-shadow: 0 12px 36px rgba(0,0,0,0.5); }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; background: rgba(220,38,38,0.15); color: #f87171; border: 1px solid rgba(220,38,38,0.3); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-    .title { font-size: 20px; font-weight: 700; margin: 16px 0 8px; color: #ffffff; letter-spacing: -0.02em; }
-    .tracking-code { font-family: monospace; font-size: 26px; font-weight: 700; color: #f87171; letter-spacing: 0.08em; margin: 12px 0; }
-    .details-table { width: 100%; border-collapse: collapse; margin: 20px 0; background: rgba(255,255,255,0.03); border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); overflow: hidden; }
-    .details-table td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); }
-    .details-table td strong { color: #ffffff; }
-    .btn { display: inline-block; padding: 12px 24px; background: #dc2626; color: #ffffff !important; text-decoration: none; border-radius: 10px; font-size: 13px; font-weight: 600; text-align: center; margin-top: 16px; letter-spacing: 0.02em; }
-    .footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 11px; color: rgba(255,255,255,0.4); text-align: center; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f6; color: #171a20; margin: 0; padding: 32px 16px; -webkit-font-smoothing: antialiased; }
+    .card { max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 32px 36px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; background: #f4f4f6; color: #171a20; border: 1px solid #e5e7eb; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .title { font-size: 24px; font-weight: 600; margin: 20px 0 6px; color: #171a20; letter-spacing: -0.02em; line-height: 1.25; }
+    .tracking-box { background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px; margin: 18px 0; text-align: center; }
+    .tracking-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; color: #5c5e62; margin-bottom: 4px; }
+    .tracking-code { font-family: -apple-system, BlinkMacSystemFont, ui-monospace, monospace; font-size: 22px; font-weight: 700; color: #171a20; letter-spacing: 0.08em; }
+    .details-table { width: 100%; border-collapse: collapse; margin: 20px 0; background: #ffffff; border-radius: 6px; border: 1px solid #e5e7eb; overflow: hidden; }
+    .details-table td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #f0f0f2; color: #393c41; }
+    .details-table tr:last-child td { border-bottom: none; }
+    .details-table td.lbl { width: 38%; text-transform: uppercase; font-size: 10px; font-weight: 600; color: #5c5e62; letter-spacing: 0.06em; }
+    .details-table td.val { color: #171a20; font-weight: 600; }
+    .footer { margin-top: 28px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #5c5e62; text-align: center; line-height: 1.7; }
+    .footer a { color: #171a20; text-decoration: underline; margin: 0 4px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="badge">Live Telemetry Alert</div>
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="${TESLA_LOGO_URL}" alt="Tesla" width="28" height="28" style="width: 28px; height: 28px; display: block;" />
+        <span style="font-size: 14px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: #171a20;">TESLA<span style="color: #e82127;">TRACK</span></span>
+      </div>
+      <div class="badge">TELEMETRY ACTIVATED</div>
+    </div>
+
     <div class="title">You are subscribed to tracking alerts</div>
-    <div class="tracking-code">${code}</div>
-    <p style="font-size: 13px; color: rgba(255,255,255,0.7); line-height: 1.6;">
-      Real-time automated status and arrival notifications will be sent directly to your inbox as this shipment progresses.
+    <div class="tracking-box">
+      <div class="tracking-label">Tracking Reference</div>
+      <div class="tracking-code">${code}</div>
+    </div>
+
+    <p style="font-size: 13px; color: #393c41; line-height: 1.6; margin: 0 0 16px;">
+      Real-time automated status and arrival notifications will be sent directly to your inbox as this shipment progresses through the autonomous logistics network.
     </p>
 
     <table class="details-table">
-      ${pkgDetails?.status ? `<tr><td>Status</td><td><strong>${pkgDetails.status}</strong></td></tr>` : ""}
-      ${pkgDetails?.origin ? `<tr><td>Origin Hub</td><td><strong>${pkgDetails.origin}</strong></td></tr>` : ""}
-      ${pkgDetails?.destination ? `<tr><td>Destination</td><td><strong>${pkgDetails.destination}</strong></td></tr>` : ""}
-      ${pkgDetails?.eta ? `<tr><td>Estimated Arrival</td><td><strong>${pkgDetails.eta}</strong></td></tr>` : ""}
+      ${pkgDetails?.status ? `<tr><td class="lbl">Status</td><td class="val">${pkgDetails.status}</td></tr>` : ""}
+      ${pkgDetails?.origin ? `<tr><td class="lbl">Origin Hub</td><td class="val">${pkgDetails.origin}</td></tr>` : ""}
+      ${pkgDetails?.destination ? `<tr><td class="lbl">Destination</td><td class="val">${pkgDetails.destination}</td></tr>` : ""}
+      ${pkgDetails?.eta ? `<tr><td class="lbl">Estimated Arrival</td><td class="val">${pkgDetails.eta}</td></tr>` : ""}
     </table>
 
     <div class="footer">
-      Sent automatically via Tesla Track Logistics &bull; Powered by Google Maps Platform &bull; Gmail SMTP Relay
+      <div>Tesla Logistics Autonomous Transport Network</div>
+      <div style="margin-top: 6px;">
+        <a href="https://tesla.com/support">Support</a> &bull;
+        <a href="https://tesla.com/legal/privacy">Privacy Policy</a>
+      </div>
+      <div style="margin-top: 10px; color: #8d9096; font-size: 10px;">Tesla, Inc. &copy; ${new Date().getFullYear()} &bull; 1 Tesla Road, Austin, TX 78725</div>
     </div>
   </div>
 </body>
@@ -449,33 +471,51 @@ export async function sendDeliveryCompleteEmail(
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0b0c10; color: #ffffff; margin: 0; padding: 24px; }
-    .card { max-width: 560px; margin: 0 auto; background: #15171e; border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 32px; box-shadow: 0 12px 36px rgba(0,0,0,0.5); }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-    .title { font-size: 22px; font-weight: 700; margin: 16px 0 8px; color: #ffffff; letter-spacing: -0.02em; }
-    .tracking-code { font-family: monospace; font-size: 26px; font-weight: 700; color: #34d399; letter-spacing: 0.08em; margin: 12px 0; }
-    .delivery-box { background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.2); border-radius: 12px; padding: 16px; margin: 20px 0; font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.85); }
-    .footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 11px; color: rgba(255,255,255,0.4); text-align: center; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f6; color: #171a20; margin: 0; padding: 32px 16px; -webkit-font-smoothing: antialiased; }
+    .card { max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 32px 36px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .title { font-size: 24px; font-weight: 600; margin: 20px 0 6px; color: #171a20; letter-spacing: -0.02em; line-height: 1.25; }
+    .tracking-box { background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px; margin: 18px 0; text-align: center; }
+    .tracking-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; color: #5c5e62; margin-bottom: 4px; }
+    .tracking-code { font-family: -apple-system, BlinkMacSystemFont, ui-monospace, monospace; font-size: 22px; font-weight: 700; color: #171a20; letter-spacing: 0.08em; }
+    .delivery-box { background: #ecfdf5; border: 1px solid #d1fae5; border-radius: 6px; padding: 16px 18px; margin: 20px 0; font-size: 13px; line-height: 1.6; color: #171a20; }
+    .footer { margin-top: 28px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #5c5e62; text-align: center; line-height: 1.7; }
+    .footer a { color: #171a20; text-decoration: underline; margin: 0 4px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="badge">&check; Delivery Completed</div>
-    <div class="title">Your shipment has arrived</div>
-    <div class="tracking-code">${code}</div>
-
-    <div class="delivery-box">
-      <strong>Delivered to:</strong> ${pkgDetails?.destination || "Destination Address"}<br>
-      <strong>Delivered timestamp:</strong> ${pkgDetails?.deliveredAt || new Date().toLocaleString()}<br>
-      <strong>Verification:</strong> Completed via carrier drop-off confirmation.
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="${TESLA_LOGO_URL}" alt="Tesla" width="28" height="28" style="width: 28px; height: 28px; display: block;" />
+        <span style="font-size: 14px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: #171a20;">TESLA<span style="color: #e82127;">TRACK</span></span>
+      </div>
+      <div class="badge">&check; DELIVERED</div>
     </div>
 
-    <p style="font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.5;">
-      Thank you for using Tesla Track Live Logistics. If you have questions regarding this dropoff, please contact dispatch.
+    <div class="title">Your shipment has arrived</div>
+    <div class="tracking-box">
+      <div class="tracking-label">Tracking Reference</div>
+      <div class="tracking-code">${code}</div>
+    </div>
+
+    <div class="delivery-box">
+      <strong>Delivered Location:</strong> ${pkgDetails?.destination || "Destination Address"}<br>
+      <strong>Timestamp:</strong> ${pkgDetails?.deliveredAt || new Date().toLocaleString()}<br>
+      <strong>Verification:</strong> Electronic drop-off verification confirmed.
+    </div>
+
+    <p style="font-size: 13px; color: #393c41; line-height: 1.6;">
+      Thank you for choosing TeslaTrack Autonomous Logistics. If you have questions regarding this delivery, please reach out to fleet support.
     </p>
 
     <div class="footer">
-      Tesla Track Logistics &bull; Dispatched via Gmail SMTP
+      <div>Tesla Logistics Autonomous Transport Network</div>
+      <div style="margin-top: 6px;">
+        <a href="https://tesla.com/support">Support</a> &bull;
+        <a href="https://tesla.com/legal/privacy">Privacy Policy</a>
+      </div>
+      <div style="margin-top: 10px; color: #8d9096; font-size: 10px;">Tesla, Inc. &copy; ${new Date().getFullYear()} &bull; 1 Tesla Road, Austin, TX 78725</div>
     </div>
   </div>
 </body>

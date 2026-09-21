@@ -1,0 +1,215 @@
+{
+  "entities": {
+    "Package": {
+      "title": "Package",
+      "description": "Shipment package details, location, status, and journey progress",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Unique tracking code",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "status": {
+          "type": "string",
+          "description": "Current shipment status",
+          "enum": [
+            "Order Received",
+            "Processing",
+            "In Transit",
+            "Customs Clearance",
+            "Out for Delivery",
+            "Delivered",
+            "Cancelled",
+            "On Hold"
+          ]
+        },
+        "eta": {
+          "type": "string",
+          "description": "Estimated time of arrival",
+          "maxLength": 64
+        },
+        "origin": {
+          "type": "string",
+          "description": "Origin address or city",
+          "maxLength": 256
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination address or city",
+          "maxLength": 256
+        },
+        "carrier": {
+          "type": "string",
+          "description": "Logistics carrier name",
+          "maxLength": 128
+        },
+        "weight": {
+          "type": "string",
+          "description": "Package weight",
+          "maxLength": 64
+        },
+        "speed_kph": {
+          "type": "number",
+          "description": "Average or current speed in km/h"
+        },
+        "start_progress": {
+          "type": "number",
+          "description": "Progress ratio between 0 and 1"
+        },
+        "sender_name": {
+          "type": "string",
+          "description": "Sender full name or company",
+          "maxLength": 128
+        },
+        "sender_email": {
+          "type": "string",
+          "description": "Sender email address",
+          "format": "email",
+          "maxLength": 128
+        },
+        "sender_phone": {
+          "type": "string",
+          "description": "Sender contact phone",
+          "maxLength": 64
+        },
+        "sender_address": {
+          "type": "string",
+          "description": "Sender full pickup address",
+          "maxLength": 256
+        },
+        "receiver_name": {
+          "type": "string",
+          "description": "Recipient full name or organization",
+          "maxLength": 128
+        },
+        "receiver_email": {
+          "type": "string",
+          "description": "Recipient email address",
+          "format": "email",
+          "maxLength": 128
+        },
+        "receiver_phone": {
+          "type": "string",
+          "description": "Recipient contact phone",
+          "maxLength": 64
+        },
+        "receiver_address": {
+          "type": "string",
+          "description": "Recipient delivery address",
+          "maxLength": 256
+        },
+        "delivery_method": {
+          "type": "string",
+          "description": "Method of shipment",
+          "maxLength": 64
+        },
+        "shipping_cost": {
+          "type": "number",
+          "description": "Total shipping cost"
+        },
+        "customs_status": {
+          "type": "string",
+          "description": "Customs clearance status",
+          "maxLength": 64
+        },
+        "customs_fee": {
+          "type": "number",
+          "description": "Customs duties or inspection fees"
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        },
+        "notify_email": {
+          "type": "string",
+          "description": "User email opted in for future status updates",
+          "format": "email",
+          "maxLength": 128
+        },
+        "notification_emails": {
+          "type": "array",
+          "description": "List of user emails subscribed for status updates",
+          "items": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 128
+          }
+        }
+      },
+      "required": ["code", "status", "origin", "destination", "carrier"]
+    },
+    "Subscriber": {
+      "title": "Subscriber",
+      "description": "Subscriber to package email notifications",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Email address of subscriber",
+          "format": "email",
+          "maxLength": 128
+        },
+        "code": {
+          "type": "string",
+          "description": "Tracking code of subscribed package",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 64
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO timestamp of subscription"
+        }
+      },
+      "required": ["email", "code"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin user profile for system operations",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Admin email address",
+          "format": "email",
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "description": "Authorization role",
+          "enum": ["admin"]
+        },
+        "created_at": {
+          "type": "string",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/packages/{packageCode}": {
+      "schema": {
+        "$ref": "#/entities/Package"
+      },
+      "description": "Package records accessible for reading by tracking code"
+    },
+    "/subscribers/{subscriberId}": {
+      "schema": {
+        "$ref": "#/entities/Subscriber"
+      },
+      "description": "Email notification subscriptions per package"
+    },
+    "/admins/{adminId}": {
+      "schema": {
+        "$ref": "#/entities/Admin"
+      },
+      "description": "Admin privileges and role validation records"
+    }
+  }
+}

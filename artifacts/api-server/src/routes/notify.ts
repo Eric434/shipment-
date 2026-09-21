@@ -5,10 +5,9 @@ import {
   verifySmtpConnection,
   sendSubscriptionEmail,
   sendDeliveryCompleteEmail,
-  sendRegistrationEmail,
-  generateRegistrationEmailHtml,
   sendEmail,
 } from "../lib/mailer";
+import { EMAIL_TEMPLATES, type TrackingEmailData } from "../lib/trackingEmailTemplates";
 
 const router: IRouter = Router();
 
@@ -55,13 +54,27 @@ router.post("/notify/smtp-test", async (req, res) => {
 
   const result = await sendEmail({
     to: to.trim(),
-    subject: "Test Email from Tesla Track (Gmail SMTP)",
+    subject: "Test Email: Tesla Track Gmail SMTP Verified",
     text: "This is a test notification verifying that Gmail SMTP is properly configured and operational.",
     html: `
-      <div style="font-family: sans-serif; background: #111; color: #fff; padding: 24px; border-radius: 12px; max-width: 480px;">
-        <h2 style="color: #dc2626; margin-top: 0;">Gmail SMTP Verified</h2>
-        <p>Your Gmail SMTP configuration is operational and successfully delivering delivery tracking notifications.</p>
-        <p style="font-size: 12px; color: #888;">Dispatched at ${new Date().toISOString()}</p>
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #ffffff; color: #171a20; padding: 32px; border-radius: 8px; max-width: 520px; border: 1px solid #e5e7eb; box-shadow: 0 4px 20px rgba(0,0,0,0.06);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <img src="https://img.icons8.com/?size=100&id=OinYGm0fZ470&format=png&color=000000" alt="Tesla" width="28" height="28" style="width: 28px; height: 28px; display: block;" />
+            <span style="font-size: 14px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: #171a20;">TESLA<span style="color: #e82127;">TRACK</span></span>
+          </div>
+          <span style="display: inline-block; padding: 4px 10px; border-radius: 4px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">SMTP ACTIVE</span>
+        </div>
+        <h2 style="font-size: 22px; font-weight: 600; color: #171a20; margin: 0 0 8px; letter-spacing: -0.02em;">Gmail SMTP Verified</h2>
+        <p style="font-size: 14px; color: #393c41; line-height: 1.6; margin: 0 0 16px;">
+          Your TeslaTrack Gmail SMTP relay connection has been verified. Automated live delivery tracking notices and courier dispatch alerts can now be delivered directly to customer inboxes.
+        </p>
+        <div style="background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 16px; font-size: 12px; color: #5c5e62;">
+          Dispatched: <strong>${new Date().toUTCString()}</strong>
+        </div>
+        <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #8d9096; text-align: center;">
+          Tesla Logistics Autonomous Dispatch System &bull; 1 Tesla Road, Austin, TX
+        </div>
       </div>
     `,
   });
@@ -73,74 +86,131 @@ router.post("/notify/smtp-test", async (req, res) => {
   }
 });
 
-router.get("/notify/registration-preview", (req, res) => {
-  const code = (req.query.code as string || "TSL-7824-SF").toUpperCase();
-  const html = generateRegistrationEmailHtml({
-    code,
-    recipientEmail: (req.query.to as string) || "recipient@example.com",
-    recipientName: (req.query.name as string) || "Alexander Vance",
-    role: (req.query.role as "receiver" | "sender") || "receiver",
-    origin: (req.query.origin as string) || "Fremont Gigafactory, CA",
-    destination: (req.query.destination as string) || "San Francisco Hub, CA",
-    eta: (req.query.eta as string) || "Today, 5:30 PM",
-    carrier: "Tesla Semi Precision Fleet",
-    weight: "3.6 kg (Precision Autonomous Package)",
-    delivery_method: "Priority Autonomous Express",
-    shipping_cost: 49.99,
-    customs_status: "Pre-Cleared",
-    customs_fee: 0,
-    sender_name: "Tesla Logistics Dispatch",
-    receiver_name: (req.query.name as string) || "Alexander Vance",
-  });
+// ─── Tracking Mail Templates Endpoints ────────────────────────────────────────
 
-  if (req.query.raw === "true") {
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(html);
-    return;
-  }
-
-  res.json({ code, html });
+router.get("/notify/templates", (_req, res) => {
+  const templates = EMAIL_TEMPLATES.map((t) => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    category: t.category,
+    defaultSubject: t.defaultSubject,
+    badge: t.badge,
+  }));
+  res.json({ templates });
 });
 
-router.post("/notify/test-registration-email", async (req, res) => {
-  const { to, code = "TSL-9281-EX", name = "Consignee Client", role = "receiver" } = req.body as {
-    to: string; code?: string; name?: string; role?: "receiver" | "sender";
+router.post("/notify/templates/preview", (req, res) => {
+  const { templateId, data } = req.body as {
+    templateId: string;
+    data?: Partial<TrackingEmailData>;
+  };
+
+  const template = EMAIL_TEMPLATES.find((t) => t.id === templateId) || EMAIL_TEMPLATES[0];
+
+  // Default fallback sample data if fields missing
+  const sampleData: TrackingEmailData = {
+    trackingCode: data?.trackingCode || "TSL-4821-KM",
+    recipientName: data?.recipientName || "Alex Morgan",
+    recipientEmail: data?.recipientEmail || "alex.morgan@example.com",
+    recipientAddress: data?.recipientAddress || "742 Evergreen Terrace, Palo Alto, CA 94301",
+    senderName: data?.senderName || "Tesla Central Distribution Hub",
+    origin: data?.origin || "Fremont Gigafactory Hub, CA",
+    destination: data?.destination || "Palo Alto, CA",
+    status: data?.status || "In Transit",
+    carrier: data?.carrier || "Tesla Logistics Express Fleet",
+    eta: data?.eta || "Today at 3:30 PM",
+    speedKph: data?.speedKph || 88,
+    deliveryMethod: data?.deliveryMethod || "Express Dedicated Ground",
+    customNotes: data?.customNotes || "Autonomous vehicle escort in progress. Doorstep delivery requested.",
+    appUrl: data?.appUrl || process.env.APP_URL || "https://teslatrack.io",
+    vehicleModel: data?.vehicleModel || "Model 3",
+    vin: data?.vin || "5YJ3E1EA7RF123456",
+    deliveryDate: data?.deliveryDate || "Dec 27, 2025",
+    deliveryLocation: data?.deliveryLocation || data?.destination || "Tesla Delivery Center",
+    vehicleImageUrl: data?.vehicleImageUrl,
+  };
+
+  const rendered = template.render(sampleData);
+  res.json({
+    template: {
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      badge: template.badge,
+    },
+    rendered,
+  });
+});
+
+router.post("/notify/templates/send", async (req, res) => {
+  const { to, templateId, data, customSubject } = req.body as {
+    to: string;
+    templateId: string;
+    data?: Partial<TrackingEmailData>;
+    customSubject?: string;
   };
 
   if (!to || !to.includes("@")) {
-    res.status(400).json({ error: "A valid recipient email is required." });
+    res.status(400).json({ error: "A valid 'to' email address is required." });
     return;
   }
 
+  const template = EMAIL_TEMPLATES.find((t) => t.id === templateId) || EMAIL_TEMPLATES[0];
+
+  const fullData: TrackingEmailData = {
+    trackingCode: data?.trackingCode || "TSL-XXXX-XX",
+    recipientName: data?.recipientName || "Valued Customer",
+    recipientEmail: to.trim(),
+    recipientAddress: data?.recipientAddress || data?.destination,
+    senderName: data?.senderName,
+    origin: data?.origin,
+    destination: data?.destination,
+    status: data?.status,
+    carrier: data?.carrier,
+    eta: data?.eta,
+    speedKph: data?.speedKph,
+    deliveryMethod: data?.deliveryMethod,
+    customNotes: data?.customNotes,
+    appUrl: data?.appUrl || process.env.APP_URL,
+    vehicleModel: data?.vehicleModel,
+    vin: data?.vin,
+    deliveryDate: data?.deliveryDate,
+    deliveryLocation: data?.deliveryLocation,
+    vehicleImageUrl: data?.vehicleImageUrl,
+  };
+
+  const rendered = template.render(fullData);
+  const subject = customSubject?.trim() || rendered.subject;
+
   if (!isEmailConfigured()) {
-    res.status(400).json({
-      error: "Gmail SMTP credentials (GMAIL_USER and GMAIL_APP_PASSWORD) not configured in environment.",
+    console.warn(`[Gmail SMTP] Send-template requested to ${to}, but SMTP credentials are not set.`);
+    res.json({
+      success: true,
+      simulated: true,
+      message: "Template generated successfully. To dispatch live emails, configure GMAIL_USER and GMAIL_APP_PASSWORD in settings.",
+      subject,
     });
     return;
   }
 
-  const result = await sendRegistrationEmail({
-    code: code.toUpperCase(),
-    recipientEmail: to.trim(),
-    recipientName: name,
-    role,
-    origin: "Tesla Factory Dispatch, Austin TX",
-    destination: "Client Residence, Los Angeles CA",
-    eta: "Tomorrow, 2:15 PM PST",
-    carrier: "Tesla Express Precision Fleet",
-    weight: "4.2 kg",
-    delivery_method: "Priority Direct Express",
-    shipping_cost: 59.00,
-    customs_status: "Verified",
-    customs_fee: 0,
-    sender_name: "Tesla Logistics Ops",
-    receiver_name: name,
+  const sendResult = await sendEmail({
+    to: to.trim(),
+    subject,
+    text: rendered.text,
+    html: rendered.html,
   });
 
-  if (result.success) {
-    res.json({ success: true, messageId: result.messageId, to: to.trim(), code });
+  if (sendResult.success) {
+    res.json({
+      success: true,
+      messageId: sendResult.messageId,
+      subject,
+      recipient: to.trim(),
+    });
   } else {
-    res.status(500).json({ error: result.error });
+    res.status(500).json({ error: sendResult.error || "Failed to dispatch email via Gmail SMTP." });
   }
 });
 

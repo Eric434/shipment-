@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ── Global Safety Net ───────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Global Helpers ──────────────────────────────────────────────────────
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == "ericwalison2406@gmail.com" && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // ── Connection Test Probe (Mandated by SKILL.md) ────────────────────────
+    match /test/{docId} {
+      allow read: if true;
+      allow write: if isVerifiedAdmin();
+    }
+
+    // ── Package Validation Helpers ──────────────────────────────────────────
+    function isValidPackage(data) {
+      return data.code is string && data.code.size() > 0 && data.code.size() <= 64 && data.code.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.status is string && data.status.size() <= 64
+        && data.origin is string && data.origin.size() <= 256
+        && data.destination is string && data.destination.size() <= 256
+        && (!('carrier' in data) || (data.carrier is string && data.carrier.size() <= 128))
+        && (!('weight' in data) || (data.weight is string && data.weight.size() <= 64))
+        && (!('eta' in data) || (data.eta is string && data.eta.size() <= 64))
+        && (!('speed_kph' in data) || (data.speed_kph is number && data.speed_kph >= 0 && data.speed_kph <= 2000))
+        && (!('start_progress' in data) || (data.start_progress is number && data.start_progress >= 0 && data.start_progress <= 1))
+        && (!('shipping_cost' in data) || (data.shipping_cost is number && data.shipping_cost >= 0))
+        && (!('customs_fee' in data) || (data.customs_fee is number && data.customs_fee >= 0))
+        && (!('sender_name' in data) || (data.sender_name is string && data.sender_name.size() <= 128))
+        && (!('sender_email' in data) || (data.sender_email is string && data.sender_email.size() <= 128))
+        && (!('sender_phone' in data) || (data.sender_phone is string && data.sender_phone.size() <= 64))
+        && (!('sender_address' in data) || (data.sender_address is string && data.sender_address.size() <= 256))
+        && (!('receiver_name' in data) || (data.receiver_name is string && data.receiver_name.size() <= 128))
+        && (!('receiver_email' in data) || (data.receiver_email is string && data.receiver_email.size() <= 128))
+        && (!('receiver_phone' in data) || (data.receiver_phone is string && data.receiver_phone.size() <= 64))
+        && (!('receiver_address' in data) || (data.receiver_address is string && data.receiver_address.size() <= 256))
+        && (!('delivery_method' in data) || (data.delivery_method is string && data.delivery_method.size() <= 64))
+        && (!('customs_status' in data) || (data.customs_status is string && data.customs_status.size() <= 64))
+        && (!('notify_email' in data) || (data.notify_email is string && data.notify_email.size() <= 128))
+        && (!('notification_emails' in data) || (data.notification_emails is list && data.notification_emails.size() <= 50));
+    }
+
+    // ── Packages Collection ─────────────────────────────────────────────────
+    match /packages/{packageCode} {
+      // Public single-package tracking by code
+      allow get: if isValidId(packageCode);
+      // List all packages requires administrator access
+      allow list: if isVerifiedAdmin();
+
+      // Creation by verified admin or initial package record
+      allow create: if isValidId(packageCode)
+        && isValidPackage(incoming())
+        && incoming().code == packageCode;
+
+      // Update by verified admin with immutable package code, or user opting in to notifications
+      allow update: if isValidId(packageCode)
+        && incoming().code == existing().code
+        && (
+          (isVerifiedAdmin() && isValidPackage(incoming()))
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notify_email', 'notification_emails', 'updated_at'])
+            && (!('notify_email' in incoming()) || (incoming().notify_email is string && incoming().notify_email.size() <= 128))
+            && (!('notification_emails' in incoming()) || (incoming().notification_emails is list && incoming().notification_emails.size() <= 50))
+          )
+        );
+
+      // Deletion by verified admin
+      allow delete: if isVerifiedAdmin() && isValidId(packageCode);
+    }
+
+    // ── Subscribers Collection ──────────────────────────────────────────────
+    match /subscribers/{subscriberId} {
+      allow get: if isValidId(subscriberId) && (
+        isVerifiedAdmin() || (isSignedIn() && existing().email == request.auth.token.email)
+      );
+      allow list: if isVerifiedAdmin();
+
+      allow create: if isValidId(subscriberId)
+        && incoming().email is string && incoming().email.size() > 0 && incoming().email.size() <= 128
+        && incoming().code is string && incoming().code.size() > 0 && incoming().code.size() <= 64
+        && incoming().code.matches('^[a-zA-Z0-9_\\-]+$');
+
+      allow update, delete: if isVerifiedAdmin() && isValidId(subscriberId);
+    }
+
+    // ── Admins Collection ───────────────────────────────────────────────────
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && (request.auth.uid == adminId || isVerifiedAdmin());
+      allow list: if isVerifiedAdmin();
+      allow create, update, delete: if isVerifiedAdmin() && isValidId(adminId);
+    }
+  }
+}

@@ -5,6 +5,7 @@ import packagesRouter from "./packages";
 import adminRouter from "./admin";
 import basemapsRouter from "./basemaps";
 import mapsGroundingRouter from "./mapsGrounding";
+import aiQuickTrackRouter from "./aiQuickTrack";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(packagesRouter);
 router.use(notifyRouter);
 router.use(basemapsRouter);
 router.use(mapsGroundingRouter);
+router.use(aiQuickTrackRouter);
 
 export default router;

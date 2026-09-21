@@ -5,18 +5,18 @@ import {
   MessageSquare, Settings, Truck, User, MapPin, Phone, Mail, Scale,
   DollarSign, Shield, Globe, Zap, Bell, Clock, TrendingUp, BarChart3,
   Download, ChevronDown, ChevronUp, Send, HelpCircle,
-  Wifi, Star, QrCode, Languages, Search, ExternalLink,
+  Wifi, Star, QrCode, Languages, Search, Sparkles, Bot, Wand2,
 } from "lucide-react";
 import {
   adminLogin, adminListPackages, adminCreatePackage,
-  adminDeletePackage, adminUpdatePackage, checkSmtpStatus, sendTestSmtpEmail,
-  sendPackageRegistrationEmail, fetchPackageRegistrationPreview, sendTestRegistrationEmail,
-  type Package as Pkg,
+  adminDeletePackage, adminUpdatePackage, checkSmtpStatus, sendTestSmtpEmail, type Package as Pkg,
 } from "@/lib/api";
+import { TrackingEmailTemplatesTab } from "@/components/TrackingEmailTemplatesTab";
+import { AIQuickTrackingModal } from "@/components/AIQuickTrackingModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type AdminTab = "dashboard" | "shipments" | "payments" | "customs" | "support" | "settings";
+type AdminTab = "dashboard" | "shipments" | "templates" | "payments" | "customs" | "support" | "settings";
 
 // ─── Route presets ────────────────────────────────────────────────────────────
 
@@ -90,7 +90,6 @@ function blankForm() {
     receiver_phone: "",
     receiver_address: "",
     routePreset: "sj_sf",
-    notify_parties: true,
     events: [
       { time_label: "", label: "Order Received", location: "Merchant", done: true, sort_order: 0 },
       { time_label: "", label: "Processing", location: "Warehouse", done: false, sort_order: 1 },
@@ -103,115 +102,6 @@ function blankForm() {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function EmailPreviewModal({
-  title,
-  html,
-  recipientEmail,
-  onClose,
-  onSend,
-  isSending,
-}: {
-  title: string;
-  html: string;
-  recipientEmail?: string;
-  onClose: () => void;
-  onSend?: () => void;
-  isSending?: boolean;
-}) {
-  const handleOpenWindow = () => {
-    try {
-      const win = window.open("", "_blank");
-      if (win) {
-        win.document.write(html);
-        win.document.close();
-      }
-    } catch {}
-  };
-
-  const handlePrint = () => {
-    try {
-      const win = window.open("", "_blank");
-      if (win) {
-        win.document.write(html);
-        win.document.close();
-        setTimeout(() => win.print(), 300);
-      }
-    } catch {}
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[60] flex items-center justify-center p-3 sm:p-6">
-      <div className="bg-[#141414] border border-white/12 rounded-2xl w-full max-w-4xl h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Top bar */}
-        <div className="px-5 py-3.5 border-b border-white/8 bg-[#181818] flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-red-600/15 border border-red-500/25 flex items-center justify-center flex-shrink-0">
-              <Mail className="w-3.5 h-3.5 text-red-400" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-white/90 truncate flex items-center gap-2">
-                <span>{title}</span>
-                <span className="text-[9px] px-2 py-0.5 rounded-full bg-red-600/20 text-red-300 font-normal">Official Dispatch Template</span>
-              </div>
-              {recipientEmail && (
-                <div className="text-[10px] text-white/40 truncate">
-                  To: <span className="text-white/70 font-mono">{recipientEmail}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={handleOpenWindow}
-              className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-white/10 text-white/50 hover:text-white hover:border-white/25 transition-all"
-              title="Open in new window"
-            >
-              <ExternalLink className="w-3 h-3" />
-              <span className="hidden sm:inline">New Tab</span>
-            </button>
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-white/10 text-white/50 hover:text-white hover:border-white/25 transition-all"
-              title="Print / Save PDF"
-            >
-              <Download className="w-3 h-3" />
-              <span className="hidden sm:inline">PDF</span>
-            </button>
-            {onSend && (
-              <button
-                onClick={onSend}
-                disabled={isSending}
-                className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-medium transition-all"
-              >
-                {isSending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                <span>{isSending ? "Sending…" : "Dispatch Now"}</span>
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="text-white/30 hover:text-white/70 transition-colors p-1.5 rounded-lg hover:bg-white/5"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Email Preview Frame */}
-        <div className="flex-1 bg-[#0b0b0b] p-3 sm:p-5 overflow-auto flex items-center justify-center">
-          <div className="w-full max-w-[680px] h-full bg-[#0d0f14] rounded-xl overflow-hidden shadow-xl border border-white/6 flex flex-col">
-            <iframe
-              title="Email Preview"
-              srcDoc={html}
-              className="w-full flex-1 border-0 bg-transparent"
-              sandbox="allow-same-origin"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
@@ -318,61 +208,18 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
 
 function ShipmentDetailModal({
   pkg,
-  token = "",
-  showToast,
   onClose,
   onTrack,
+  onComposeEmail,
 }: {
   pkg: Pkg;
-  token?: string;
-  showToast?: (msg: string, type?: "ok" | "err") => void;
   onClose: () => void;
   onTrack: (c: string) => void;
+  onComposeEmail?: (c: string) => void;
 }) {
   const STATUS_STEPS = ["Order Received","Processing","In Transit","Customs Clearance","Out for Delivery","Delivered"];
   const currentStep = STATUS_STEPS.findIndex((s) => s.toLowerCase() === pkg.status.toLowerCase());
   const activeIdx = currentStep >= 0 ? currentStep : 2;
-
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const [previewTitle, setPreviewTitle] = useState("");
-  const [previewRecipient, setPreviewRecipient] = useState("");
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [sendingRole, setSendingRole] = useState<"receiver" | "sender" | null>(null);
-  const [actionStatus, setActionStatus] = useState<string | null>(null);
-
-  const handlePreview = async (role: "receiver" | "sender") => {
-    setLoadingPreview(true);
-    const res = await fetchPackageRegistrationPreview(pkg.code, role);
-    setLoadingPreview(false);
-    if (res.ok && res.html) {
-      setPreviewHtml(res.html);
-      setPreviewTitle(`Registration Receipt · ${role === "receiver" ? "Consignee (Recipient)" : "Consignor (Sender)"}`);
-      setPreviewRecipient(role === "receiver" ? (pkg.receiver_email || "Recipient") : (pkg.sender_email || "Sender"));
-    } else {
-      showToast?.(res.error || "Failed to generate preview", "err");
-    }
-  };
-
-  const handleSendEmail = async (role: "receiver" | "sender") => {
-    const targetEmail = role === "receiver" ? pkg.receiver_email : pkg.sender_email;
-    if (!targetEmail || !targetEmail.includes("@")) {
-      showToast?.(`No valid email address configured for ${role}.`, "err");
-      return;
-    }
-    setSendingRole(role);
-    setActionStatus(null);
-    const res = await sendPackageRegistrationEmail(token, pkg.code, { role });
-    setSendingRole(null);
-    if (res.success) {
-      const msg = `Registration email dispatched to ${role === "receiver" ? "Recipient" : "Sender"} (${targetEmail})!`;
-      setActionStatus(msg);
-      showToast?.(msg, "ok");
-    } else {
-      const err = res.error || "Failed to dispatch email.";
-      setActionStatus(`Error: ${err}`);
-      showToast?.(err, "err");
-    }
-  };
 
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -385,6 +232,17 @@ function ShipmentDetailModal({
             <StatusBadge status={pkg.status} />
           </div>
           <div className="flex items-center gap-2">
+            {onComposeEmail && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onComposeEmail(pkg.code);
+                }}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-600/10 text-red-400 hover:bg-red-600/20 transition-all"
+              >
+                <Mail className="w-3 h-3" /> Email Customer
+              </button>
+            )}
             <button onClick={() => onTrack(pkg.code)}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-white/10 text-white/50 hover:text-white hover:border-white/25 transition-all">
               <Eye className="w-3 h-3" /> Live Track
@@ -503,149 +361,22 @@ function ShipmentDetailModal({
               </div>
             </div>
           )}
-
-          {/* Professional Registration Email & Telemetry Card */}
-          <div className="md:col-span-2 bg-red-950/20 rounded-xl border border-red-500/25 p-4 space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-red-600/20 flex items-center justify-center">
-                  <Mail className="w-3.5 h-3.5 text-red-400" />
-                </div>
-                <div>
-                  <span className="text-xs font-semibold text-white/90">Official Registration Email Dispatch</span>
-                  <div className="text-[10px] text-white/40">Branded consignment receipt with real-time GPS tracking link & telemetry summary</div>
-                </div>
-              </div>
-              {actionStatus && (
-                <span className="text-[10px] px-2.5 py-1 rounded-full bg-red-600/20 text-red-300 border border-red-500/30">
-                  {actionStatus}
-                </span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              {/* Recipient (Consignee) */}
-              <div className="p-3 bg-white/2 rounded-lg border border-white/6 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Recipient / Consignee</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${pkg.receiver_email ? "text-emerald-400 bg-emerald-500/10" : "text-white/30 bg-white/5"}`}>
-                    {pkg.receiver_email ? "Email On File" : "No Email"}
-                  </span>
-                </div>
-                <div className="text-xs text-white/80 font-mono truncate">{pkg.receiver_email || "—"}</div>
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={() => handlePreview("receiver")}
-                    disabled={loadingPreview}
-                    className="flex-1 text-[10px] py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 flex items-center justify-center gap-1 transition-all"
-                  >
-                    <Eye className="w-3 h-3" />
-                    <span>Preview Email</span>
-                  </button>
-                  <button
-                    onClick={() => handleSendEmail("receiver")}
-                    disabled={!pkg.receiver_email || sendingRole === "receiver"}
-                    className="flex-1 text-[10px] py-1.5 px-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-30 text-white font-medium flex items-center justify-center gap-1 transition-all"
-                  >
-                    {sendingRole === "receiver" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                    <span>Dispatch Mail</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Sender (Consignor) */}
-              <div className="p-3 bg-white/2 rounded-lg border border-white/6 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Sender / Consignor</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${pkg.sender_email ? "text-emerald-400 bg-emerald-500/10" : "text-white/30 bg-white/5"}`}>
-                    {pkg.sender_email ? "Email On File" : "No Email"}
-                  </span>
-                </div>
-                <div className="text-xs text-white/80 font-mono truncate">{pkg.sender_email || "—"}</div>
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={() => handlePreview("sender")}
-                    disabled={loadingPreview}
-                    className="flex-1 text-[10px] py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 flex items-center justify-center gap-1 transition-all"
-                  >
-                    <Eye className="w-3 h-3" />
-                    <span>Preview Email</span>
-                  </button>
-                  <button
-                    onClick={() => handleSendEmail("sender")}
-                    disabled={!pkg.sender_email || sendingRole === "sender"}
-                    className="flex-1 text-[10px] py-1.5 px-2 rounded-lg bg-white/10 hover:bg-white/15 disabled:opacity-30 text-white/80 font-medium flex items-center justify-center gap-1 transition-all"
-                  >
-                    {sendingRole === "sender" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                    <span>Dispatch Mail</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
-
-      {previewHtml && (
-        <EmailPreviewModal
-          title={previewTitle}
-          html={previewHtml}
-          recipientEmail={previewRecipient}
-          onClose={() => setPreviewHtml(null)}
-          onSend={() => {
-            const role = previewTitle.includes("Recipient") ? "receiver" : "sender";
-            handleSendEmail(role);
-          }}
-          isSending={sendingRole !== null}
-        />
-      )}
     </div>
   );
 }
 
 // ─── Create/Edit Modal ────────────────────────────────────────────────────────
 
-function CreateModal({
-  token,
-  onClose,
-  onCreated,
-}: {
-  token: string;
-  onClose: () => void;
-  onCreated: (info?: { code: string; emailSent?: boolean }) => void;
-}) {
+function CreateModal({ token, onClose, onCreated }: { token: string; onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState(blankForm());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [modalTab, setModalTab] = useState<"basic" | "sender" | "receiver" | "events">("basic");
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const preset = ROUTE_PRESETS[form.routePreset];
-
-  const handleOpenPreview = async () => {
-    setLoadingPreview(true);
-    try {
-      const q = new URLSearchParams({
-        code: form.code || "TSL-NEW-01",
-        to: form.receiver_email || "consignee@example.com",
-        name: form.receiver_name || "Valued Consignee",
-        origin: form.origin || preset.origin,
-        destination: form.destination || preset.destination,
-        eta: form.eta || "Estimated Dispatch",
-      });
-      const res = await fetch(`/api/notify/registration-preview?${q.toString()}`);
-      const data = await res.json();
-      if (data?.html) {
-        setPreviewHtml(data.html);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingPreview(false);
-    }
-  };
 
   const handleCreate = async () => {
     if (!form.code || !form.eta) { setError("Tracking code and ETA are required"); return; }
@@ -664,17 +395,10 @@ function CreateModal({
       receiver_name: form.receiver_name, receiver_email: form.receiver_email,
       receiver_phone: form.receiver_phone, receiver_address: form.receiver_address,
       events: form.events.map((e, i) => ({ ...e, sort_order: i })),
-      notify_parties: form.notify_parties,
-    });
+    } as Parameters<typeof adminCreatePackage>[1]);
     setLoading(false);
-    if (result.success) {
-      onCreated({
-        code: result.code || form.code,
-        emailSent: !!(result.registrationEmailsSent?.receiver || result.registrationEmailsSent?.sender),
-      });
-    } else {
-      setError(result.error ?? "Failed to create");
-    }
+    if (result.success) onCreated();
+    else setError(result.error ?? "Failed to create");
   };
 
   const TABS = [
@@ -853,39 +577,6 @@ function CreateModal({
               <input value={form.receiver_address} onChange={(e) => set("receiver_address", e.target.value)}
                 className="field-input" placeholder="456 Oak Ave, City, State ZIP" />
             </div>
-
-            {/* Registration Email Dispatch Toggle */}
-            <div className="p-3.5 bg-red-950/20 rounded-xl border border-red-500/25 space-y-2 mt-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Mail className="w-3.5 h-3.5 text-red-400" />
-                  <span className="text-xs font-semibold text-white/90">Automated Dispatch Registration Email</span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.notify_parties}
-                    onChange={(e) => set("notify_parties", e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-8 h-4 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-white after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-red-600"></div>
-                </label>
-              </div>
-              <p className="text-[10px] text-white/40 leading-relaxed">
-                Sends a high-fidelity Tesla Logistics booking confirmation receipt with live tracking PIN, real-time map URL, route telemetry, and delivery specifications directly to {form.receiver_email ? <span className="text-white/80 font-mono">{form.receiver_email}</span> : "the recipient's email"}.
-              </p>
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={handleOpenPreview}
-                  disabled={loadingPreview}
-                  className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1.5 font-medium transition-colors"
-                >
-                  {loadingPreview ? <Loader2 className="w-3 h-3 animate-spin" /> : <Eye className="w-3 h-3" />}
-                  <span>Inspect Email Template Preview</span>
-                </button>
-              </div>
-            </div>
           </>}
 
           {modalTab === "events" && <>
@@ -934,17 +625,8 @@ function CreateModal({
                 className={`w-2 h-2 rounded-full transition-all ${modalTab === t.id ? "bg-red-500" : "bg-white/15"}`} />
             ))}
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              onClick={handleOpenPreview}
-              disabled={loadingPreview}
-              className="px-3 py-2 text-xs text-white/60 hover:text-white border border-white/10 hover:border-white/25 rounded-lg flex items-center gap-1.5 transition-all"
-            >
-              {loadingPreview ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5 text-red-400" />}
-              <span>Preview Mail</span>
-            </button>
-            <button onClick={onClose} className="px-3 py-2 text-xs text-white/40 hover:text-white/70 transition-colors">Cancel</button>
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="px-4 py-2 text-xs text-white/40 hover:text-white/70 transition-colors">Cancel</button>
             <button onClick={handleCreate} disabled={loading}
               className="flex items-center gap-2 px-5 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white text-xs font-medium transition-all">
               {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
@@ -953,15 +635,6 @@ function CreateModal({
           </div>
         </div>
       </div>
-
-      {previewHtml && (
-        <EmailPreviewModal
-          title="Registration Email Preview"
-          html={previewHtml}
-          recipientEmail={form.receiver_email || "consignee@example.com"}
-          onClose={() => setPreviewHtml(null)}
-        />
-      )}
     </div>
   );
 }
@@ -1136,9 +809,10 @@ function DashboardTab({ packages, onCreateNew, onRefresh, loading, onNavigate }:
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           { label: "New Shipment", icon: Plus, action: onCreateNew, primary: true },
+          { label: "Email Templates", icon: Mail, action: () => onNavigate("templates"), primary: false },
           { label: "Refresh Data", icon: RefreshCw, action: onRefresh, primary: false },
           { label: "GPS Tracking", icon: Globe, action: () => onNavigate("shipments"), primary: false },
           { label: "Notifications", icon: Bell, action: () => onNavigate("support"), primary: false },
@@ -1158,10 +832,24 @@ function DashboardTab({ packages, onCreateNew, onRefresh, loading, onNavigate }:
 
 // ─── Shipments Tab ────────────────────────────────────────────────────────────
 
-function ShipmentsTab({ packages, token, loading, onRefresh, onTrack, onCreateNew, showToast }: {
-  packages: Pkg[]; token: string; loading: boolean;
-  onRefresh: () => void; onTrack: (c: string) => void;
-  onCreateNew: () => void; showToast: (msg: string, type?: "ok" | "err") => void;
+function ShipmentsTab({
+  packages,
+  token,
+  loading,
+  onRefresh,
+  onTrack,
+  onCreateNew,
+  showToast,
+  onComposeEmail,
+}: {
+  packages: Pkg[];
+  token: string;
+  loading: boolean;
+  onRefresh: () => void;
+  onTrack: (c: string) => void;
+  onCreateNew: () => void;
+  showToast: (msg: string, type?: "ok" | "err") => void;
+  onComposeEmail?: (code: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -1286,15 +974,19 @@ function ShipmentsTab({ packages, token, loading, onRefresh, onTrack, onCreateNe
                           className="flex items-center gap-1 text-[10px] text-white/30 hover:text-purple-400 transition-colors">
                           <Eye className="w-3 h-3" /> View
                         </button>
-                        <button onClick={() => setViewPkg(pkg)}
-                          title="Registration Email & Telemetry"
-                          className="flex items-center gap-1 text-[10px] text-white/30 hover:text-red-400 transition-colors">
-                          <Mail className="w-3 h-3" /> Mail
-                        </button>
                         <button onClick={() => onTrack(pkg.code)}
                           className="flex items-center gap-1 text-[10px] text-white/30 hover:text-blue-400 transition-colors">
                           <Globe className="w-3 h-3" /> Track
                         </button>
+                        {onComposeEmail && (
+                          <button
+                            onClick={() => onComposeEmail(pkg.code)}
+                            className="flex items-center gap-1 text-[10px] text-white/30 hover:text-red-400 transition-colors"
+                            title="Compose Tracking Email"
+                          >
+                            <Mail className="w-3 h-3" /> Mail
+                          </button>
+                        )}
                         <button onClick={() => handleDelete(pkg.code)} disabled={deletingCode === pkg.code}
                           className="flex items-center gap-1 text-[10px] text-white/30 hover:text-red-400 transition-colors disabled:opacity-50">
                           {deletingCode === pkg.code ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
@@ -1313,13 +1005,9 @@ function ShipmentsTab({ packages, token, loading, onRefresh, onTrack, onCreateNe
       {viewPkg && (
         <ShipmentDetailModal
           pkg={viewPkg}
-          token={token}
-          showToast={showToast}
           onClose={() => setViewPkg(null)}
-          onTrack={(c) => {
-            setViewPkg(null);
-            onTrack(c);
-          }}
+          onTrack={(c) => { setViewPkg(null); onTrack(c); }}
+          onComposeEmail={onComposeEmail}
         />
       )}
     </div>
@@ -1727,7 +1415,6 @@ function SettingsTab({ onLogout }: { onLogout: () => void }) {
   const [testEmail, setTestEmail] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null);
-  const [registrationPreviewHtml, setRegistrationPreviewHtml] = useState<string | null>(null);
 
   const loadSmtp = useCallback(async () => {
     setCheckingSmtp(true);
@@ -1881,60 +1568,6 @@ function SettingsTab({ onLogout }: { onLogout: () => void }) {
               </div>
             )}
 
-            {/* Registration Email Dispatch Test & Template Preview */}
-            <div className="pt-3 mt-3 border-t border-white/6 space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[10px] text-white/70 font-semibold uppercase tracking-wider">
-                    Official Registration Email Template
-                  </div>
-                  <div className="text-[10px] text-white/35 mt-0.5">
-                    High-contrast branded dispatch receipt with QR tracking & route telemetry
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      const res = await fetch("/api/notify/registration-preview");
-                      const d = await res.json();
-                      if (d?.html) {
-                        setRegistrationPreviewHtml(d.html);
-                      }
-                    } catch (e) {
-                      console.error(e);
-                    }
-                  }}
-                  className="px-2.5 py-1 rounded-lg border border-red-500/30 bg-red-600/10 hover:bg-red-600/20 text-red-400 text-[11px] font-medium flex items-center gap-1.5 transition-all"
-                >
-                  <Eye className="w-3 h-3" />
-                  <span>Inspect Template</span>
-                </button>
-              </div>
-
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={async () => {
-                    if (!testEmail || !testEmail.includes("@")) return;
-                    setSendingTest(true);
-                    setTestResult(null);
-                    const res = await sendTestRegistrationEmail(testEmail);
-                    setSendingTest(false);
-                    if (res.success) {
-                      setTestResult({ success: true, msg: `Registration dispatch sent to ${testEmail}! (ID: ${res.messageId})` });
-                    } else {
-                      setTestResult({ success: false, msg: res.error || "Failed to dispatch registration email." });
-                    }
-                  }}
-                  disabled={!testEmail.includes("@") || sendingTest || !smtpStatus?.configured}
-                  className="w-full py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-30 text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5"
-                >
-                  {sendingTest ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3 text-red-400" />}
-                  <span>Dispatch Sample Registration Email to {testEmail || "Recipient"}</span>
-                </button>
-              </div>
-            </div>
-
             {!smtpStatus?.configured && (
               <p className="text-[10px] text-white/35 mt-2 leading-relaxed">
                 To activate Gmail SMTP for live shipment alerts, add <code className="text-red-400 bg-white/5 px-1 py-0.5 rounded">GMAIL_USER</code> (your Gmail address) and <code className="text-red-400 bg-white/5 px-1 py-0.5 rounded">GMAIL_APP_PASSWORD</code> (a 16-character Google App Password from your Google Account security settings) to the environment variables.
@@ -1943,25 +1576,6 @@ function SettingsTab({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
       </div>
-
-      {registrationPreviewHtml && (
-        <EmailPreviewModal
-          title="Registration Email Template"
-          html={registrationPreviewHtml}
-          recipientEmail={testEmail || "sample-consignee@example.com"}
-          onClose={() => setRegistrationPreviewHtml(null)}
-          onSend={smtpStatus?.configured && testEmail.includes("@") ? async () => {
-            setSendingTest(true);
-            const res = await sendTestRegistrationEmail(testEmail);
-            setSendingTest(false);
-            if (res.success) {
-              setTestResult({ success: true, msg: `Registration email dispatched to ${testEmail}!` });
-              setRegistrationPreviewHtml(null);
-            }
-          } : undefined}
-          isSending={sendingTest}
-        />
-      )}
 
       {/* Site pages */}
       <div className="bg-[#111] border border-white/6 rounded-2xl p-5">
@@ -2048,6 +1662,7 @@ export default function AdminPage({ onBack, onTrack }: { onBack: () => void; onT
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<AdminTab>("dashboard");
+  const [selectedMailPackageCode, setSelectedMailPackageCode] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -2075,6 +1690,7 @@ export default function AdminPage({ onBack, onTrack }: { onBack: () => void; onT
   const NAV_ITEMS: { id: AdminTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "shipments", label: "Shipments", icon: Package },
+    { id: "templates", label: "Email Mailer", icon: Mail },
     { id: "payments", label: "Payments", icon: CreditCard },
     { id: "customs", label: "Customs", icon: Globe },
     { id: "support", label: "Support", icon: MessageSquare },
@@ -2084,6 +1700,7 @@ export default function AdminPage({ onBack, onTrack }: { onBack: () => void; onT
   const TAB_LABELS: Record<AdminTab, string> = {
     dashboard: "Dashboard",
     shipments: "Shipments",
+    templates: "Tracking Email Mailer & Templates",
     payments: "Payments & Invoices",
     customs: "Customs & Clearance",
     support: "Support & FAQ",
@@ -2179,6 +1796,7 @@ export default function AdminPage({ onBack, onTrack }: { onBack: () => void; onT
                 <p className="text-[10px] text-white/25 mt-0.5">
                   {tab === "dashboard" && "Overview of your logistics operations"}
                   {tab === "shipments" && `${packages.length} total shipments`}
+                  {tab === "templates" && "Compose, preview, and dispatch Tesla-branded tracking emails and waybills"}
                   {tab === "payments" && `$${packages.reduce((s, p) => s + Number(p.shipping_cost || 0), 0).toFixed(2)} total revenue`}
                   {tab === "customs" && `${packages.filter((p) => p.customs_status === "Held").length} held · ${packages.filter((p) => p.customs_status === "Cleared").length} cleared`}
                   {tab === "support" && "Help center and contact options"}
@@ -2194,7 +1812,26 @@ export default function AdminPage({ onBack, onTrack }: { onBack: () => void; onT
               <DashboardTab packages={packages} onCreateNew={() => setShowCreate(true)} onRefresh={loadPackages} loading={loading} onNavigate={setTab} />
             )}
             {tab === "shipments" && (
-              <ShipmentsTab packages={packages} token={token} loading={loading} onRefresh={loadPackages} onTrack={onTrack} onCreateNew={() => setShowCreate(true)} showToast={showToast} />
+              <ShipmentsTab
+                packages={packages}
+                token={token}
+                loading={loading}
+                onRefresh={loadPackages}
+                onTrack={onTrack}
+                onCreateNew={() => setShowCreate(true)}
+                showToast={showToast}
+                onComposeEmail={(code) => {
+                  setSelectedMailPackageCode(code);
+                  setTab("templates");
+                }}
+              />
+            )}
+            {tab === "templates" && (
+              <TrackingEmailTemplatesTab
+                packages={packages}
+                initialPackageCode={selectedMailPackageCode || undefined}
+                onTrack={onTrack}
+              />
             )}
             {tab === "payments" && <PaymentsTab packages={packages} />}
             {tab === "customs" && <CustomsTab packages={packages} />}
@@ -2205,19 +1842,8 @@ export default function AdminPage({ onBack, onTrack }: { onBack: () => void; onT
       </div>
 
       {showCreate && (
-        <CreateModal
-          token={token}
-          onClose={() => setShowCreate(false)}
-          onCreated={(info) => {
-            setShowCreate(false);
-            if (info?.emailSent) {
-              showToast(`Shipment ${info.code} created & official registration email dispatched!`);
-            } else {
-              showToast(`Shipment ${info?.code || ""} created!`);
-            }
-            loadPackages();
-          }}
-        />
+        <CreateModal token={token} onClose={() => setShowCreate(false)}
+          onCreated={() => { setShowCreate(false); showToast("Shipment created!"); loadPackages(); }} />
       )}
     </div>
   );
