@@ -1,21 +1,21 @@
 {
-  "version": 3,
-  "buildCommand": "pnpm run build",
-  "installCommand": "pnpm install",
-  "projects": [
+  "version": 2,
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "builds": [
     {
-      "name": "tracker",
-      "slug": "tracker",
-      "rootDirectory": "artifacts/tracker",
-      "buildCommand": "pnpm run build",
-      "env": []
+      "src": "server.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "server.ts"
     },
     {
-      "name": "api-server",
-      "slug": "api-server",
-      "rootDirectory": "artifacts/api-server",
-      "buildCommand": "pnpm run build",
-      "env": []
+      "src": "/(.*)",
+      "dest": "server.ts"
     }
   ]
 }

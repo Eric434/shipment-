@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { createServer as createHttpServer } from "node:http";
-import { createServer as createViteServer } from "vite";
 import app from "./artifacts/api-server/src/app";
 
 const PORT = 3000;
@@ -12,6 +11,7 @@ async function startServer() {
   const httpServer = createHttpServer(app);
 
   if (!isProduction) {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       configFile: path.resolve(trackerRoot, "vite.config.ts"),
       server: {
@@ -39,7 +39,11 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error("Failed to start Tesla Tracker server:", err);
-  process.exit(1);
-});
+if (process.env.VERCEL) {
+  module.exports = app;
+} else {
+  startServer().catch((err) => {
+    console.error("Failed to start Tesla Tracker server:", err);
+    process.exit(1);
+  });
+}
