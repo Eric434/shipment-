@@ -1,0 +1,3 @@
+[build]
+  # Relative to the base directory (artifacts/mockup-sandbox)
+  publish = "dist"
