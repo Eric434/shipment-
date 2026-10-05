@@ -14,7 +14,6 @@ import {
   getNotificationEmailFromFirestore,
 } from "@/lib/firebase";
 import { GoogleMapsNavigationHUD } from "@/components/GoogleMapsNavigation";
-import { TeslaVehicleDashboard } from "@/components/TeslaVehicleDashboard";
 import { GoogleMapsGroundingPanel } from "@/components/GoogleMapsGroundingPanel";
 import { PrintShippingLabelModal } from "@/components/PrintShippingLabelModal";
 import {
@@ -2450,20 +2449,6 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
           )}
         </div>
       )}
-
-      {/* Tesla-Style Vehicle Stats Dashboard Card — bottom right */}
-      <div className="absolute bottom-20 sm:bottom-24 right-3 sm:right-4 z-20 pointer-events-auto">
-        <TeslaVehicleDashboard
-          currentSpeedKph={simSpeed}
-          bearing={bearing}
-          progressPercent={progress}
-          isLive={playing && !isDelivered}
-          isDelivered={isDelivered}
-          origin={pkg.origin}
-          destination={pkg.destination}
-          vehicleModel={`Tesla Logistics Fleet #${(pkg?.code || "").replace(/\D/g, "").slice(0, 4) || "042"}`}
-        />
-      </div>
 
       {/* Route & Traffic legend */}
       <div className="absolute left-3 z-20 hidden sm:flex flex-col gap-1.5"
