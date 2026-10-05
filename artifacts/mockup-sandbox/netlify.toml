@@ -1,0 +1,3 @@
+[build]
+  command = "npm --workspace @workspace/mockup-sandbox run build"
+  publish = "dist"
