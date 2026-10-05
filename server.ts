@@ -1,6 +1,10 @@
 import express from "express";
 import path from "path";
 import { createServer as createHttpServer } from "node:http";
+// The deployment bundle is CommonJS, while the API server source uses ESM syntax.
+// esbuild resolves this import during bundling; the directive keeps the project typecheck
+// from rejecting the intentional CJS-to-ESM boundary.
+// @ts-expect-error The bundled server is the CommonJS entrypoint for the ESM API app.
 import app from "./artifacts/api-server/src/app";
 
 const PORT = 3000;
