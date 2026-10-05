@@ -14,10 +14,8 @@ import {
   getNotificationEmailFromFirestore,
 } from "@/lib/firebase";
 import { GoogleMapsNavigationHUD } from "@/components/GoogleMapsNavigation";
-import { TeslaVehicleDashboard } from "@/components/TeslaVehicleDashboard";
 import { GoogleMapsGroundingPanel } from "@/components/GoogleMapsGroundingPanel";
 import { PrintShippingLabelModal } from "@/components/PrintShippingLabelModal";
-import { TrackingEmailTemplatesTab } from "@/components/TrackingEmailTemplatesTab";
 import {
   loadGoogleMaps,
   TESLA_DARK_MAP_STYLES,
@@ -333,7 +331,7 @@ function computeStepMs(eta: string, startProgress: number): number {
   return Math.max(500, Math.min(30_000, stepMs));
 }
 
-type DrawerTab = "timeline" | "places" | "controls" | "map" | "alerts" | "templates" | "docs";
+type DrawerTab = "timeline" | "places" | "controls" | "map" | "alerts" | "docs";
 interface Props { code: string; onBack: () => void; }
 
 // ─── Loading / Error screens ──────────────────────────────────────────────────
@@ -1295,12 +1293,10 @@ function DocumentsPanel({
   code,
   pkg,
   onOpenPrintLabel,
-  onOpenTemplates,
 }: {
   code: string;
   pkg: Pkg;
   onOpenPrintLabel?: () => void;
-  onOpenTemplates?: () => void;
 }) {
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -1348,33 +1344,6 @@ function DocumentsPanel({
               <Printer className="w-3 h-3" />
               <span>Print Label</span>
             </button>
-          </div>
-        </div>
-
-        {/* Featured: Automated Tracking Email Templates */}
-        <div className="rounded-xl border border-blue-500/25 bg-blue-600/[0.04] p-3 transition-all hover:border-blue-500/40">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-blue-600/15 border border-blue-500/30 flex items-center justify-center flex-shrink-0 text-blue-400">
-                <Mail className="w-3.5 h-3.5" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-medium text-white/90">Tracking Mail Templates</div>
-                <div className="text-[9px] text-white/40 truncate">
-                  Dispatched, In Transit, Out for Delivery, and Label templates
-                </div>
-              </div>
-            </div>
-
-            {onOpenTemplates && (
-              <button
-                onClick={onOpenTemplates}
-                className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 font-medium px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 transition-all flex-shrink-0"
-              >
-                <span>View Templates</span>
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            )}
           </div>
         </div>
 
@@ -2070,9 +2039,9 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
             }
           </button>
 
-          {(["timeline", "places", "controls", "map", "alerts", "templates", "docs"] as DrawerTab[]).map((tab, i) => {
-            const icons = { timeline: List, places: MapPin, controls: Navigation, map: Layers, alerts: Bell, templates: Mail, docs: FileText };
-            const labels = { timeline: "Track", places: "Maps Data", controls: "Controls", map: "Map", alerts: "Alerts", templates: "Templates", docs: "Docs" };
+          {(["timeline", "places", "controls", "map", "alerts", "docs"] as DrawerTab[]).map((tab, i) => {
+            const icons = { timeline: List, places: MapPin, controls: Navigation, map: Layers, alerts: Bell, docs: FileText };
+            const labels = { timeline: "Track", places: "Maps Data", controls: "Controls", map: "Map", alerts: "Alerts", docs: "Docs" };
             const Icon = icons[tab];
             const isLast = i === 6;
             return (
@@ -2105,15 +2074,15 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
       )}
 
       <div
-        className={`absolute top-0 right-0 bottom-0 z-30 ${drawerTab === "templates" ? "w-[640px] max-w-[96vw]" : "w-80 max-w-[85vw]"} bg-[#0b0b0b] border-l border-white/8 flex flex-col shadow-2xl transition-all duration-300 ease-in-out`}
+        className={`absolute top-0 right-0 bottom-0 z-30 w-80 max-w-[85vw] bg-[#0b0b0b] border-l border-white/8 flex flex-col shadow-2xl transition-all duration-300 ease-in-out`}
         style={{ transform: drawerOpen ? "translateX(0)" : "translateX(100%)" }}
       >
         {/* Drawer header */}
         <div className="flex items-center justify-between px-3 py-3 border-b border-white/8 flex-shrink-0">
           <div className="flex items-center gap-1 bg-white/4 rounded-xl border border-white/8 p-0.5 overflow-x-auto scrollbar-none">
-            {(["timeline", "places", "controls", "map", "alerts", "templates", "docs"] as DrawerTab[]).map((tab) => {
-              const icons = { timeline: List, places: MapPin, controls: Navigation, map: Layers, alerts: Bell, templates: Mail, docs: FileText };
-              const labels = { timeline: "Timeline", places: "Maps Data", controls: "Controls", map: "Map", alerts: "Alerts", templates: "Templates", docs: "Docs" };
+            {(["timeline", "places", "controls", "map", "alerts", "docs"] as DrawerTab[]).map((tab) => {
+              const icons = { timeline: List, places: MapPin, controls: Navigation, map: Layers, alerts: Bell, docs: FileText };
+              const labels = { timeline: "Timeline", places: "Maps Data", controls: "Controls", map: "Map", alerts: "Alerts", docs: "Docs" };
               const Icon = icons[tab];
               return (
                 <button key={tab} onClick={() => setDrawerTab(tab)}
@@ -2399,38 +2368,11 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
               }}
             />
           )}
-          {drawerTab === "templates" && (
-            <div className="h-full flex flex-col overflow-y-auto">
-              <div className="p-4 border-b border-white/6 flex items-center justify-between flex-shrink-0 bg-white/[0.02]">
-                <div>
-                  <div className="text-[9px] text-white/30 uppercase tracking-widest font-semibold">Tracking Mail Templates</div>
-                  <p className="text-[11px] text-white/50 mt-0.5">Automated carrier notification templates for <span className="font-mono text-white/80">{code}</span></p>
-                </div>
-                <button
-                  id="templates-print-label-shortcut-btn"
-                  onClick={() => setShowPrintLabelModal(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-medium transition-all cursor-pointer"
-                  title="Print Shipping Label"
-                >
-                  <Printer className="w-3.5 h-3.5 text-red-400" />
-                  <span>Print Label</span>
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <TrackingEmailTemplatesTab
-                  packages={[pkg]}
-                  initialPackageCode={code}
-                  onTrack={() => {}}
-                />
-              </div>
-            </div>
-          )}
           {drawerTab === "docs" && (
             <DocumentsPanel
               code={code}
               pkg={pkg}
               onOpenPrintLabel={() => setShowPrintLabelModal(true)}
-              onOpenTemplates={() => setDrawerTab("templates")}
             />
           )}
         </div>
@@ -2507,20 +2449,6 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
           )}
         </div>
       )}
-
-      {/* Tesla-Style Vehicle Stats Dashboard Card — bottom right */}
-      <div className="absolute bottom-20 sm:bottom-24 right-3 sm:right-4 z-20 pointer-events-auto">
-        <TeslaVehicleDashboard
-          currentSpeedKph={simSpeed}
-          bearing={bearing}
-          progressPercent={progress}
-          isLive={playing && !isDelivered}
-          isDelivered={isDelivered}
-          origin={pkg.origin}
-          destination={pkg.destination}
-          vehicleModel={`Tesla Logistics Fleet #${(pkg?.code || "").replace(/\D/g, "").slice(0, 4) || "042"}`}
-        />
-      </div>
 
       {/* Route & Traffic legend */}
       <div className="absolute left-3 z-20 hidden sm:flex flex-col gap-1.5"
@@ -2727,10 +2655,6 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
           code={code}
           deliveryEstimate={deliveryEstimate}
           onClose={() => setShowPrintLabelModal(false)}
-          onOpenTemplates={() => {
-            setDrawerTab("templates");
-            setDrawerOpen(true);
-          }}
         />
       )}
     </div>
