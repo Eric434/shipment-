@@ -1438,6 +1438,7 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
   });
   const [isCameraFollowing, setIsCameraFollowing] = useState<boolean>(true);
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
+  const [showDeliveredBanner, setShowDeliveredBanner] = useState(false);
   const deliveryFiredRef = useRef(false);
 
   const [mapTheme, setMapTheme] = useState<"dark" | "satellite" | "roadmap">("dark");
@@ -1890,6 +1891,13 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
   const progress = Math.round((posIdx / (TOTAL - 1)) * 100);
   const isDelivered = posIdx >= TOTAL - 1 || pkg.status === "Delivered";
   const simSpeed = isDelivered ? 0 : playing ? pkg.speed_kph : 0;
+
+  useEffect(() => {
+    if (!isDelivered) return;
+    setShowDeliveredBanner(true);
+    const timer = window.setTimeout(() => setShowDeliveredBanner(false), 30_000);
+    return () => window.clearTimeout(timer);
+  }, [isDelivered]);
 
   const currentCoord = fullPath[posIdx];
   const destCoord = fullPath[TOTAL - 1];
@@ -2522,7 +2530,7 @@ function TrackingView({ pkg, code, onBack }: { pkg: Pkg; code: string; onBack: (
       )}
 
       {/* Delivered banner */}
-      {isDelivered && (
+      {isDelivered && showDeliveredBanner && (
         <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center px-3">
           <div className="bg-[#0d2010] border border-green-500/30 rounded-2xl px-5 py-3 flex items-center justify-between gap-4 shadow-2xl max-w-md w-full">
             <div className="flex items-center gap-3 min-w-0">
