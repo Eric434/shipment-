@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type Application, type NextFunction, type Request, type Response } from "express";
 import path from "path";
 import { createServer as createHttpServer } from "node:http";
 // The deployment bundle is CommonJS, while the API server source uses ESM syntax.
@@ -12,7 +12,8 @@ const PORT = 3000;
 async function startServer() {
   const isProduction = process.env.NODE_ENV === "production";
   const trackerRoot = path.resolve(process.cwd(), "artifacts/tracker");
-  const httpServer = createHttpServer(app);
+  const typedApp = app as unknown as Application;
+  const httpServer = createHttpServer(typedApp);
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import("vite");
@@ -25,11 +26,11 @@ async function startServer() {
       appType: "spa",
       root: trackerRoot,
     });
-    app.use(vite.middlewares);
+    typedApp.use(vite.middlewares);
   } else {
     const distPath = path.resolve(trackerRoot, "dist/public");
-    app.use(express.static(distPath));
-    app.use((req, res, next) => {
+    typedApp.use(express.static(distPath));
+    typedApp.use((req: Request, res: Response, next: NextFunction) => {
       if (req.method === "GET" && !req.path.startsWith("/api")) {
         res.sendFile(path.join(distPath, "index.html"));
       } else {
