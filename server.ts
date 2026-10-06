@@ -1,4 +1,4 @@
-import express, { type Application, type RequestHandler } from "express";
+import express, { type NextFunction, type Request, type RequestHandler, type Response } from "express";
 import path from "path";
 import { createServer as createHttpServer } from "node:http";
 // The deployment bundle is CommonJS, while the API server source uses ESM syntax.
@@ -12,8 +12,10 @@ const PORT = 3000;
 async function startServer() {
   const isProduction = process.env.NODE_ENV === "production";
   const trackerRoot = path.resolve(process.cwd(), "artifacts/tracker");
-  const typedApp = app as unknown as Application;
-  const httpServer = createHttpServer(typedApp);
+  const typedApp = app as unknown as {
+    use: (...middleware: unknown[]) => unknown;
+  };
+  const httpServer = createHttpServer(app as unknown as import("node:http").RequestListener);
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import("vite");
