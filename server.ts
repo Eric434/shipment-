@@ -1,4 +1,4 @@
-import express, { type Application, type NextFunction, type Request, type Response } from "express";
+import express, { type Application, type RequestHandler } from "express";
 import path from "path";
 import { createServer as createHttpServer } from "node:http";
 // The deployment bundle is CommonJS, while the API server source uses ESM syntax.
@@ -30,13 +30,14 @@ async function startServer() {
   } else {
     const distPath = path.resolve(trackerRoot, "dist/public");
     typedApp.use(express.static(distPath));
-    typedApp.use((req: Request, res: Response, next: NextFunction) => {
+    const serveSpaFallback: RequestHandler = (req, res, next) => {
       if (req.method === "GET" && !req.path.startsWith("/api")) {
         res.sendFile(path.join(distPath, "index.html"));
       } else {
         next();
       }
-    });
+    };
+    typedApp.use(serveSpaFallback);
   }
 
   httpServer.listen(PORT, "0.0.0.0", () => {
